@@ -26,10 +26,21 @@ export default function AdminLayout({
   useEffect(() => {
     async function checkAdminAuth() {
       setIsLoading(true)
+      
+      // 3.5초 이상 세션 확인 지연 시 강제로 로딩을 풀고 로그인 페이지로 이동하는 안전 장치
+      const timeoutId = setTimeout(() => {
+        setIsLoading(false)
+        setIsAdmin(false)
+        router.push('/login')
+      }, 3500)
+
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        // 클라이언트 사이드 지연을 막기 위해 속도가 훨씬 빠른 getSession을 사용합니다.
+        const { data: { session } } = await supabase.auth.getSession()
+        const user = session?.user
         
         if (!user) {
+          clearTimeout(timeoutId)
           router.push('/login')
           return
         }
@@ -40,6 +51,7 @@ export default function AdminLayout({
           .eq('id', user.id)
           .single()
 
+        clearTimeout(timeoutId)
         if (profile && (profile.role === 'admin' || profile.role === 'staff')) {
           setIsAdmin(true)
         } else {
@@ -48,6 +60,7 @@ export default function AdminLayout({
           router.push('/')
         }
       } catch (e) {
+        clearTimeout(timeoutId)
         setIsAdmin(false)
         router.push('/')
       } finally {
