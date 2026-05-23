@@ -34,9 +34,27 @@ export default function AdminLayoutClient({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
   const handleLogout = async () => {
+    // 1. Supabase 공식 세션 종료
     await supabase.auth.signOut()
-    router.push('/')
-    router.refresh()
+
+    // 2. 서버 및 브라우저 쿠키 강제 소멸 API 호출 (완벽한 캐시 및 세션 제거)
+    try {
+      await fetch('/api/clear-cookies', { method: 'POST' })
+    } catch (e) {
+      console.error('Failed to clear session cookies:', e)
+    }
+
+    // 3. 로컬 스토리지의 supabase 세션 흔적도 명시적으로 완전 소멸
+    if (typeof window !== 'undefined') {
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('sb-') || key.includes('supabase')) {
+          localStorage.removeItem(key)
+        }
+      })
+    }
+
+    // 4. 메인 페이지로 이동 및 새로고침
+    window.location.href = '/'
   }
 
   const menuItems = [
