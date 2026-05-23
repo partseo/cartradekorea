@@ -25,6 +25,18 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [showPassword, setShowPassword] = useState(false)
 
+  // 로그인 세션 생성을 실시간 감지하여 즉시 관리자 페이지로 리다이렉트하는 안전 장치
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        window.location.href = '/admin'
+      }
+    })
+    return () => {
+      subscription.unsubscribe()
+    }
+  }, [supabase])
+
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
