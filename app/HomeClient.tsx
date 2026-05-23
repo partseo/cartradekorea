@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -91,7 +91,7 @@ export default function HomeClient() {
   const [brandSelect, setBrandSelect] = useState('')
   const [dbCars, setDbCars] = useState<any[]>([])
   
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   useEffect(() => {
     async function fetchLatestCars() {
@@ -128,7 +128,7 @@ export default function HomeClient() {
       }
     }
     fetchLatestCars()
-  }, [supabase])
+  }, [])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -263,6 +263,8 @@ export default function HomeClient() {
                 <img
                   src={car.image}
                   alt={car.title}
+                  loading="lazy"
+                  decoding="async"
                   className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                 />
                 <span className="absolute top-3 left-3 bg-slate-900/90 backdrop-blur-sm text-accent text-xs font-bold px-2.5 py-1 rounded-md">
@@ -294,7 +296,7 @@ export default function HomeClient() {
                     {t.detailsButton}
                   </Link>
                   <Link
-                    href={`/quote?carId={car.id}`}
+                    href={`/quote?carId=${car.id}`}
                     className="flex-1 text-center border border-slate-300 text-slate-700 hover:bg-slate-50 text-sm font-semibold py-2.5 rounded-lg transition-colors cursor-pointer"
                   >
                     {t.quoteButton}

@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { createClient } from '@/lib/supabase/client'
-import { Send, Ship, CheckCircle, RefreshCw, AlertCircle, PhoneCall } from 'lucide-react'
+import { Send, Ship, CheckCircle, RefreshCw, AlertCircle, PhoneCall, User } from 'lucide-react'
 
 // Zod 유효성 스키마
 const quoteSchema = z.object({
@@ -38,9 +38,10 @@ const FALLBACK_PORTS: Record<string, any[]> = {
 function QuoteFormContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
-  const supabase = createClient()
 
   const carId = searchParams.get('carId')
+  const supabase = useMemo(() => createClient(), [])
+
   const [selectedCar, setSelectedCar] = useState<any>(null)
   const [countries, setCountries] = useState<any[]>([])
   const [ports, setPorts] = useState<any[]>([])
@@ -49,6 +50,10 @@ function QuoteFormContent() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [isLoadingInitial, setIsLoadingInitial] = useState(true)
+  const [loggedInUser, setLoggedInUser] = useState<{ name: string; email: string } | null>(null)
+  const [prefilled, setPrefilled] = useState<Record<string, boolean>>({})
+
 
   const { register, handleSubmit, formState: { errors }, setValue } = useForm<QuoteFormValues>({
     resolver: zodResolver(quoteSchema),
@@ -62,46 +67,75 @@ function QuoteFormContent() {
     }
   })
 
-  // 1. 선택한 차량 정보 로드
+  // 차량 정보, 국가 목록, 사용자 정보를 병렬로 한번에 로드 (속도 최적화)
   useEffect(() => {
-    async function loadCar() {
-      if (!carId) return
+    let cancelled = false
+    async function loadAll() {
       try {
-        const { data } = await supabase
-          .from('cars')
-          .select('id, title, price_usd, brand')
-          .eq('id', carId)
-          .single()
-        if (data) setSelectedCar(data)
-      } catch (err) {
-        // Fallback Mock Car
-        setSelectedCar({
-          id: carId,
-          title: 'Premium Certified Korean SUV',
-          price_usd: 14200,
-          brand: 'Kia'
-        })
-      }
-    }
-    loadCar()
-  }, [carId, supabase])
+        const [carResult, countriesResult, sessionResult] = await Promise.all([
+          carId
+            ? supabase.from('cars').select('id, title, price_usd, brand').eq('id', carId).single()
+            : Promise.resolve({ data: null, error: null }),
+          supabase.from('countries').select('id, name, code'),
+          supabase.auth.getSession()
+        ])
 
-  // 2. 국가 목록 로드
-  useEffect(() => {
-    async function loadCountries() {
-      try {
-        const { data } = await supabase.from('countries').select('id, name, code')
-        if (data && data.length > 0) {
-          setCountries(data)
+        if (cancelled) return
+
+        // 차량 정보
+        if (carResult.data) {
+          setSelectedCar(carResult.data)
+        } else if (carId) {
+          setSelectedCar({ id: carId, title: 'Premium Certified Korean SUV', price_usd: 14200, brand: 'Kia' })
+        }
+
+        // 국가 목록
+        if (countriesResult.data && countriesResult.data.length > 0) {
+          setCountries(countriesResult.data)
         } else {
           setCountries(FALLBACK_COUNTRIES)
         }
-      } catch (e) {
-        setCountries(FALLBACK_COUNTRIES)
+
+        // 로그인 사용자 정보 자동 불러오기 (profiles 테이블 포함)
+        const user = sessionResult.data?.session?.user
+        if (user) {
+          // profiles 테이블에서 저장된 정보 추가 조회
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('full_name, email, whatsapp, company_name')
+            .eq('id', user.id)
+            .single()
+
+          if (cancelled) return
+
+          const resolvedName =
+            profile?.full_name ||
+            user.user_metadata?.full_name ||
+            user.user_metadata?.name ||
+            user.email?.split('@')[0] || ''
+          const resolvedEmail = profile?.email || user.email || ''
+          const resolvedWhatsapp = profile?.whatsapp || user.user_metadata?.whatsapp || ''
+
+          setLoggedInUser({ name: resolvedName, email: resolvedEmail })
+          const filled: any = {}
+          if (resolvedName) { setValue('buyer_name', resolvedName); filled.name = true }
+          if (resolvedEmail) { setValue('buyer_email', resolvedEmail); filled.email = true }
+          if (resolvedWhatsapp) { setValue('whatsapp', resolvedWhatsapp); filled.whatsapp = true }
+          setPrefilled(filled)
+        }
+      } catch {
+        if (!cancelled) {
+          setCountries(FALLBACK_COUNTRIES)
+          if (carId) setSelectedCar({ id: carId, title: 'Premium Certified Korean SUV', price_usd: 14200, brand: 'Kia' })
+        }
+      } finally {
+        if (!cancelled) setIsLoadingInitial(false)
       }
     }
-    loadCountries()
-  }, [supabase])
+    loadAll()
+    return () => { cancelled = true }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
 
   // 3. 국가 선택 변경 시 해당 국가 항구 로드
   useEffect(() => {
@@ -199,9 +233,19 @@ function QuoteFormContent() {
       {/* 폼 안내 */}
       <div className="text-center mb-8 border-b border-slate-100 pb-6">
         <Ship className="h-10 w-10 text-secondary mx-auto mb-2" />
-        <h1 className="text-2xl font-extrabold text-slate-900">Request Export Quote</h1>
-        <p className="text-slate-500 text-xs mt-1">Get precise RORO / Container shipping & document agent quote.</p>
+        <h1 className="text-2xl font-extrabold text-slate-900">수출 견적 요청하기</h1>
+        <p className="text-slate-500 text-xs mt-1">RORO / 컨테이너 운임 및 통관 에이전트 정식 견적을 받아보세요.</p>
       </div>
+
+      {/* 로그인 사용자 자동 입력 안내 */}
+      {!isLoadingInitial && loggedInUser && (
+        <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 mb-6 flex items-center gap-3 text-sm">
+          <User className="h-4 w-4 text-emerald-600 shrink-0" />
+          <span className="text-emerald-700">
+            <span className="font-bold">{loggedInUser.name}</span>님의 정보로 자동 입력되었습니다.
+          </span>
+        </div>
+      )}
 
       {/* 선택된 차량 정보 표시 */}
       {selectedCar && (
@@ -227,27 +271,29 @@ function QuoteFormContent() {
       {/* 입력 폼 */}
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         
-        {/* 이름 */}
+        {/* 내 이름 */}
         <div>
-          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Full Name</label>
+          <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">내 이름</label>
           <input
             type="text"
             {...register('buyer_name')}
-            placeholder="John Doe"
-            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-secondary focus:bg-white text-slate-800"
+            placeholder="성함을 입력해 주세요"
+            disabled={isLoadingInitial}
+            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-secondary focus:bg-white text-slate-800 disabled:opacity-60"
           />
           {errors.buyer_name && <p className="text-red-500 text-xs mt-1 font-semibold">{errors.buyer_name.message}</p>}
         </div>
 
-        {/* 이메일 & WhatsApp 번호 (모바일에서 키보드 최적화) */}
+        {/* 내 이메일 & WhatsApp 번호 */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Email Address</label>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">내 이메일 주소</label>
             <input
               type="email"
               {...register('buyer_email')}
-              placeholder="john@example.com"
-              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-secondary focus:bg-white text-slate-800"
+              placeholder="이메일 주소를 입력해 주세요"
+              disabled={isLoadingInitial}
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-secondary focus:bg-white text-slate-800 disabled:opacity-60"
             />
             {errors.buyer_email && <p className="text-red-500 text-xs mt-1 font-semibold">{errors.buyer_email.message}</p>}
           </div>
@@ -313,18 +359,18 @@ function QuoteFormContent() {
         {/* 제출 버튼 */}
         <button
           type="submit"
-          disabled={isSubmitting}
+          disabled={isSubmitting || isLoadingInitial}
           className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3.5 rounded-xl shadow-lg flex items-center justify-center gap-2 transition duration-200 disabled:bg-slate-400 disabled:cursor-not-allowed cursor-pointer text-sm"
         >
           {isSubmitting ? (
             <>
               <RefreshCw className="h-4 w-4 animate-spin" />
-              <span>Submitting Request...</span>
+              <span>견적 요청 중...</span>
             </>
           ) : (
             <>
               <Send className="h-4 w-4" />
-              <span>Request Formal Quote</span>
+              <span>정식 견적 요청하기</span>
             </>
           )}
         </button>

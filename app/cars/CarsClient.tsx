@@ -1,8 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
-// 기존 page.tsx에서는 'next/navigation'의 useSearchParams를 쓰고 있었으므로, 
-// 기존 코드를 그대로 활용하여 next/navigation 에서 가져오는 것으로 구성해야 함.
+import { useState, useEffect, useMemo, useCallback, Suspense, memo } from 'react'
 import { useSearchParams as useNextSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -10,7 +8,7 @@ import { useSettings } from '@/lib/supabase/settings-context'
 import PriceDisplay from '@/components/common/PriceDisplay'
 import { Filter, SlidersHorizontal, X, ArrowUpDown, RefreshCw } from 'lucide-react'
 
-// 폴백용 가상 중고차 데이터 12종
+// 폴백용 가상 중고차 데이터
 const FALLBACK_CARS = [
   { id: 'avante-2020', title: 'Hyundai Avante 1.6 Smart', brand: 'Hyundai', year: 2020, mileage: 45000, fuel_type: 'Gasoline', transmission: 'Automatic', price_usd: 11500, price_krw: 15500000, image: 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&q=80&w=600', status: 'available' },
   { id: 'sportage-2019', title: 'Kia Sportage 2.0 Trendy', brand: 'Kia', year: 2019, mileage: 68000, fuel_type: 'Diesel', transmission: 'Automatic', price_usd: 14200, price_krw: 19100000, image: 'https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?auto=format&fit=crop&q=80&w=600', status: 'available' },
@@ -20,12 +18,174 @@ const FALLBACK_CARS = [
   { id: 'sorento-2020', title: 'Kia Sorento 2.2 Noblesse', brand: 'Kia', year: 2020, mileage: 52000, fuel_type: 'Diesel', transmission: 'Automatic', price_usd: 21500, price_krw: 29000000, image: 'https://images.unsplash.com/photo-1511919884226-fd3cad34687c?auto=format&fit=crop&q=80&w=600', status: 'available' }
 ]
 
+// ─── 스켈레톤 카드 (로딩 중 표시) ───────────────────────────
+const SkeletonCard = memo(() => (
+  <div className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm animate-pulse">
+    <div className="aspect-[16/10] bg-slate-200" />
+    <div className="p-4 space-y-3">
+      <div className="h-4 bg-slate-200 rounded w-4/5" />
+      <div className="grid grid-cols-2 gap-2">
+        <div className="h-3 bg-slate-100 rounded" />
+        <div className="h-3 bg-slate-100 rounded" />
+        <div className="h-3 bg-slate-100 rounded" />
+        <div className="h-3 bg-slate-100 rounded" />
+      </div>
+      <div className="flex gap-2 pt-2 border-t border-slate-100">
+        <div className="flex-1 h-8 bg-slate-200 rounded-md" />
+        <div className="flex-1 h-8 bg-slate-100 rounded-md" />
+      </div>
+    </div>
+  </div>
+))
+SkeletonCard.displayName = 'SkeletonCard'
+
+// ─── 필터 패널 (memo로 불필요한 리렌더 방지) ─────────────────
+interface FilterPanelProps {
+  t: any
+  searchQuery: string
+  setSearchQuery: (v: string) => void
+  selectedBrand: string
+  setSelectedBrand: (v: string) => void
+  selectedFuel: string
+  setSelectedFuel: (v: string) => void
+  selectedTrans: string
+  setSelectedTrans: (v: string) => void
+  maxPrice: string
+  setMaxPrice: (v: string) => void
+  maxMileage: string
+  setMaxMileage: (v: string) => void
+  minYear: string
+  setMinYear: (v: string) => void
+  onReset: () => void
+}
+
+const FilterPanel = memo(({
+  t, searchQuery, setSearchQuery, selectedBrand, setSelectedBrand,
+  selectedFuel, setSelectedFuel, selectedTrans, setSelectedTrans,
+  maxPrice, setMaxPrice, maxMileage, setMaxMileage,
+  minYear, setMinYear, onReset
+}: FilterPanelProps) => (
+  <div className="space-y-6">
+    <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+      <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
+        <SlidersHorizontal className="h-5 w-5 text-slate-500" /> {t.filterTitle}
+      </h3>
+      <button onClick={onReset} className="text-xs font-bold text-slate-400 hover:text-accent transition flex items-center gap-1 cursor-pointer">
+        <RefreshCw className="h-3 w-3" /> {t.filterReset}
+      </button>
+    </div>
+
+    {/* 검색어 */}
+    <div>
+      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t.filterKeyword}</label>
+      <input
+        type="text"
+        placeholder="Model name..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-secondary focus:bg-white text-slate-800"
+      />
+    </div>
+
+    {/* 브랜드 */}
+    <div>
+      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t.filterBrand}</label>
+      <select
+        value={selectedBrand}
+        onChange={(e) => setSelectedBrand(e.target.value)}
+        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none text-slate-800 cursor-pointer"
+      >
+        <option value="">{t.allBrands}</option>
+        <option value="Hyundai">Hyundai</option>
+        <option value="Kia">Kia</option>
+        <option value="Genesis">Genesis</option>
+        <option value="Samsung">Renault Korea</option>
+        <option value="KG">KG Mobility</option>
+      </select>
+    </div>
+
+    {/* 연료 종류 */}
+    <div>
+      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t.filterFuel}</label>
+      <div className="flex flex-wrap gap-2">
+        {['Gasoline', 'Diesel', 'LPG', 'Hybrid', 'Electric'].map((fuel) => (
+          <button
+            key={fuel}
+            onClick={() => setSelectedFuel(selectedFuel === fuel ? '' : fuel)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
+              selectedFuel === fuel
+                ? 'bg-secondary text-white border-secondary'
+                : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+            }`}
+          >
+            {fuel}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    {/* 변속기 */}
+    <div>
+      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t.filterTrans}</label>
+      <div className="grid grid-cols-2 gap-2">
+        {['Automatic', 'Manual'].map((trans) => (
+          <button
+            key={trans}
+            onClick={() => setSelectedTrans(selectedTrans === trans ? '' : trans)}
+            className={`py-1.5 rounded-lg text-xs font-medium border text-center transition cursor-pointer ${
+              selectedTrans === trans
+                ? 'bg-secondary text-white border-secondary'
+                : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
+            }`}
+          >
+            {trans}
+          </button>
+        ))}
+      </div>
+    </div>
+
+    {/* 가격 슬라이더 */}
+    <div>
+      <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+        <span>{t.filterMaxPrice}</span>
+        <span className="text-secondary font-extrabold">${Number(maxPrice).toLocaleString()}</span>
+      </div>
+      <input type="range" min="5000" max="80000" step="2500" value={maxPrice}
+        onChange={(e) => setMaxPrice(e.target.value)} className="w-full accent-secondary cursor-pointer" />
+    </div>
+
+    {/* 주행거리 슬라이더 */}
+    <div>
+      <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+        <span>{t.filterMaxMileage}</span>
+        <span className="text-secondary font-extrabold">{Number(maxMileage).toLocaleString()} km</span>
+      </div>
+      <input type="range" min="10000" max="200000" step="10000" value={maxMileage}
+        onChange={(e) => setMaxMileage(e.target.value)} className="w-full accent-secondary cursor-pointer" />
+    </div>
+
+    {/* 최소 연식 */}
+    <div>
+      <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t.filterMinYear}</label>
+      <select
+        value={minYear}
+        onChange={(e) => setMinYear(e.target.value)}
+        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none text-slate-800 cursor-pointer"
+      >
+        {['2012', '2015', '2017', '2018', '2019', '2020', '2021', '2022'].map((yr) => (
+          <option key={yr} value={yr}>{yr} or newer</option>
+        ))}
+      </select>
+    </div>
+  </div>
+))
+FilterPanel.displayName = 'FilterPanel'
+
+// ─── 메인 콘텐츠 ──────────────────────────────────────────────
 function CarsPageContent() {
   const { t } = useSettings()
   const searchParams = useNextSearchParams()
-  const supabase = createClient()
 
-  // 필터 상태들
   const [searchQuery, setSearchQuery] = useState(searchParams?.get('search') || '')
   const [selectedBrand, setSelectedBrand] = useState(searchParams?.get('brand') || '')
   const [selectedFuel, setSelectedFuel] = useState('')
@@ -34,30 +194,33 @@ function CarsPageContent() {
   const [maxMileage, setMaxMileage] = useState('150000')
   const [minYear, setMinYear] = useState('2015')
   const [sortBy, setSortBy] = useState('newest')
-
-  // 모바일 필터 열림/닫힘
   const [isFilterOpen, setIsFilterOpen] = useState(false)
 
-  // 최종 차량 데이터
   const [cars, setCars] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    async function loadCars() {
-      setIsLoading(true)
-      try {
-        let query = supabase
-          .from('cars')
-          .select('*, car_images(image_url, is_main)')
-          .eq('status', 'available')
+  // ✅ 핵심: supabase 클라이언트를 렌더 외부에 한번만 생성
+  const supabase = useMemo(() => createClient(), [])
 
-        const { data } = await query
-        
+  // ✅ 핵심: 의존성을 [] 로 고정 → 최초 1회만 실행
+  useEffect(() => {
+    let cancelled = false
+    async function loadCars() {
+      try {
+        const { data, error } = await supabase
+          .from('cars')
+          .select('id, title, brand, year, mileage, fuel_type, transmission, price_usd, price_krw, status, car_images(image_url, is_main)')
+          .eq('status', 'available')
+          .order('year', { ascending: false }) // DB 단에서 정렬
+
+        if (cancelled) return
+
         if (data && data.length > 0) {
           const formatted = data.map((car: any) => {
-            const mainImg = car.car_images?.find((img: any) => img.is_main)?.image_url 
-              || car.car_images?.[0]?.image_url 
-              || 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&q=80&w=600';
+            const mainImg =
+              car.car_images?.find((img: any) => img.is_main)?.image_url ||
+              car.car_images?.[0]?.image_url ||
+              'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&q=80&w=600'
             return {
               id: car.id,
               title: car.title,
@@ -76,16 +239,47 @@ function CarsPageContent() {
         } else {
           setCars(FALLBACK_CARS)
         }
-      } catch (err) {
-        setCars(FALLBACK_CARS)
+      } catch {
+        if (!cancelled) setCars(FALLBACK_CARS)
       } finally {
-        setIsLoading(false)
+        if (!cancelled) setIsLoading(false)
       }
     }
     loadCars()
+    return () => { cancelled = true }
   }, [supabase])
 
-  const resetFilters = () => {
+  // ✅ 핵심: 필터+정렬을 useMemo로 캐싱 → 차량 데이터/필터가 변할 때만 재계산
+  const filteredCars = useMemo(() => {
+    const nMaxPrice = Number(maxPrice)
+    const nMaxMileage = Number(maxMileage)
+    const nMinYear = Number(minYear)
+    const lSearch = searchQuery.toLowerCase()
+    const lBrand = selectedBrand.toLowerCase()
+    const lFuel = selectedFuel.toLowerCase()
+    const lTrans = selectedTrans.toLowerCase()
+
+    return cars
+      .filter((car) => {
+        if (lSearch && !car.title.toLowerCase().includes(lSearch)) return false
+        if (lBrand && car.brand.toLowerCase() !== lBrand) return false
+        if (lFuel && car.fuel_type.toLowerCase() !== lFuel) return false
+        if (lTrans && car.transmission.toLowerCase() !== lTrans) return false
+        if (car.price_usd > nMaxPrice) return false
+        if (car.mileage > nMaxMileage) return false
+        if (car.year < nMinYear) return false
+        return true
+      })
+      .sort((a, b) => {
+        if (sortBy === 'price_asc') return a.price_usd - b.price_usd
+        if (sortBy === 'price_desc') return b.price_usd - a.price_usd
+        if (sortBy === 'mileage_asc') return a.mileage - b.mileage
+        return b.year - a.year
+      })
+  }, [cars, searchQuery, selectedBrand, selectedFuel, selectedTrans, maxPrice, maxMileage, minYear, sortBy])
+
+  // ✅ useCallback으로 함수 재생성 방지
+  const resetFilters = useCallback(() => {
     setSearchQuery('')
     setSelectedBrand('')
     setSelectedFuel('')
@@ -94,165 +288,27 @@ function CarsPageContent() {
     setMaxMileage('150000')
     setMinYear('2015')
     setSortBy('newest')
+  }, [])
+
+  const filterPanelProps = {
+    t, searchQuery, setSearchQuery, selectedBrand, setSelectedBrand,
+    selectedFuel, setSelectedFuel, selectedTrans, setSelectedTrans,
+    maxPrice, setMaxPrice, maxMileage, setMaxMileage,
+    minYear, setMinYear, onReset: resetFilters
   }
-
-  const filteredCars = cars.filter((car) => {
-    const matchSearch = searchQuery ? car.title.toLowerCase().includes(searchQuery.toLowerCase()) : true
-    const matchBrand = selectedBrand ? car.brand.toLowerCase() === selectedBrand.toLowerCase() : true
-    const matchFuel = selectedFuel ? car.fuel_type.toLowerCase() === selectedFuel.toLowerCase() : true
-    const matchTrans = selectedTrans ? car.transmission.toLowerCase() === selectedTrans.toLowerCase() : true
-    const matchPrice = car.price_usd <= Number(maxPrice)
-    const matchMileage = car.mileage <= Number(maxMileage)
-    const matchYear = car.year >= Number(minYear)
-    return matchSearch && matchBrand && matchFuel && matchTrans && matchPrice && matchMileage && matchYear
-  }).sort((a, b) => {
-    if (sortBy === 'price_asc') return a.price_usd - b.price_usd
-    if (sortBy === 'price_desc') return b.price_usd - a.price_usd
-    if (sortBy === 'mileage_asc') return a.mileage - b.mileage
-    if (sortBy === 'year_desc') return b.year - a.year
-    return b.year - a.year
-  })
-
-  // 필터 컨트롤 패널
-  const FilterPanel = () => (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center pb-4 border-b border-slate-100">
-        <h3 className="font-bold text-slate-900 text-lg flex items-center gap-2">
-          <SlidersHorizontal className="h-5 w-5 text-slate-500" /> {t.filterTitle}
-        </h3>
-        <button 
-          onClick={resetFilters} 
-          className="text-xs font-bold text-slate-400 hover:text-accent transition flex items-center gap-1 cursor-pointer"
-        >
-          <RefreshCw className="h-3 w-3" /> {t.filterReset}
-        </button>
-      </div>
-
-      {/* 검색어 입력 */}
-      <div>
-        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t.filterKeyword}</label>
-        <input
-          type="text"
-          placeholder="Model name..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-secondary focus:bg-white text-slate-800"
-        />
-      </div>
-
-      {/* 브랜드 선택 */}
-      <div>
-        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t.filterBrand}</label>
-        <select
-          value={selectedBrand}
-          onChange={(e) => setSelectedBrand(e.target.value)}
-          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none text-slate-800 cursor-pointer"
-        >
-          <option value="">{t.allBrands}</option>
-          <option value="Hyundai">Hyundai</option>
-          <option value="Kia">Kia</option>
-          <option value="Genesis">Genesis</option>
-          <option value="Samsung">Renault Korea</option>
-          <option value="KG">KG Mobility</option>
-        </select>
-      </div>
-
-      {/* 연료 종류 */}
-      <div>
-        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t.filterFuel}</label>
-        <div className="flex flex-wrap gap-2">
-          {['Gasoline', 'Diesel', 'LPG', 'Hybrid', 'Electric'].map((fuel) => (
-            <button
-              key={fuel}
-              onClick={() => setSelectedFuel(selectedFuel === fuel ? '' : fuel)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition cursor-pointer ${
-                selectedFuel === fuel 
-                  ? 'bg-secondary text-white border-secondary' 
-                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              {fuel}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 변속기 */}
-      <div>
-        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t.filterTrans}</label>
-        <div className="grid grid-cols-2 gap-2">
-          {['Automatic', 'Manual'].map((trans) => (
-            <button
-              key={trans}
-              onClick={() => setSelectedTrans(selectedTrans === trans ? '' : trans)}
-              className={`py-1.5 rounded-lg text-xs font-medium border text-center transition cursor-pointer ${
-                selectedTrans === trans 
-                  ? 'bg-secondary text-white border-secondary' 
-                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'
-              }`}
-            >
-              {trans}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* 가격 슬라이더 */}
-      <div>
-        <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-          <span>{t.filterMaxPrice}</span>
-          <span className="text-secondary font-extrabold">${Number(maxPrice).toLocaleString()}</span>
-        </div>
-        <input
-          type="range"
-          min="5000"
-          max="80000"
-          step="2500"
-          value={maxPrice}
-          onChange={(e) => setMaxPrice(e.target.value)}
-          className="w-full accent-secondary cursor-pointer"
-        />
-      </div>
-
-      {/* 주행거리 슬라이더 */}
-      <div>
-        <div className="flex justify-between text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
-          <span>{t.filterMaxMileage}</span>
-          <span className="text-secondary font-extrabold">{Number(maxMileage).toLocaleString()} km</span>
-        </div>
-        <input
-          type="range"
-          min="10000"
-          max="200000"
-          step="10000"
-          value={maxMileage}
-          onChange={(e) => setMaxMileage(e.target.value)}
-          className="w-full accent-secondary cursor-pointer"
-        />
-      </div>
-
-      {/* 최소 연식 선택 */}
-      <div>
-        <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">{t.filterMinYear}</label>
-        <select
-          value={minYear}
-          onChange={(e) => setMinYear(e.target.value)}
-          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none text-slate-800 cursor-pointer"
-        >
-          {['2012', '2015', '2017', '2018', '2019', '2020', '2021', '2022'].map((yr) => (
-            <option key={yr} value={yr}>{yr} or newer</option>
-          ))}
-        </select>
-      </div>
-    </div>
-  )
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex-grow flex flex-col">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-slate-200 pb-6 mb-8">
         <div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">{t.viewAllButton.split(' ')[0]} {t.navInventory}</h1>
-          <p className="text-slate-500 text-sm mt-1">Found {filteredCars.length} vehicles matching your filters.</p>
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+            {t.viewAllButton.split(' ')[0]} {t.navInventory}
+          </h1>
+          <p className="text-slate-500 text-sm mt-1">
+            {isLoading
+              ? '차량 목록 불러오는 중...'
+              : `총 ${filteredCars.length}대의 차량이 검색되었습니다.`}
+          </p>
         </div>
 
         <div className="flex items-center gap-3 mt-4 md:mt-0">
@@ -281,26 +337,28 @@ function CarsPageContent() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-8 flex-grow">
+        {/* 데스크탑 필터 사이드바 */}
         <aside className="hidden md:block bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm h-fit sticky top-24">
-          <FilterPanel />
+          <FilterPanel {...filterPanelProps} />
         </aside>
 
+        {/* 차량 그리드 */}
         <div className="md:col-span-3">
           {isLoading ? (
-            <div className="flex flex-col items-center justify-center py-32 space-y-3">
-              <RefreshCw className="h-10 w-10 text-slate-400 animate-spin" />
-              <p className="text-slate-500 font-medium">Loading inventory...</p>
+            /* ✅ 스켈레톤 UI - 로딩 중에도 레이아웃 안정적으로 표시 */
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+              {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
             </div>
           ) : filteredCars.length === 0 ? (
             <div className="bg-white border border-slate-100 rounded-2xl py-24 text-center shadow-inner">
               <SlidersHorizontal className="h-12 w-12 text-slate-300 mx-auto mb-4" />
-              <h3 className="font-extrabold text-slate-900 text-lg">No Cars Found</h3>
-              <p className="text-slate-500 text-sm mt-1 px-4">We couldn't find any vehicles matching your search criteria. Try resetting filters.</p>
-              <button 
-                onClick={resetFilters} 
+              <h3 className="font-extrabold text-slate-900 text-lg">검색 결과 없음</h3>
+              <p className="text-slate-500 text-sm mt-1 px-4">조건에 맞는 차량이 없습니다. 필터를 초기화하고 다시 검색해보세요.</p>
+              <button
+                onClick={resetFilters}
                 className="mt-6 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm px-6 py-2.5 rounded-lg shadow cursor-pointer"
               >
-                Clear All Filters
+                필터 초기화
               </button>
             </div>
           ) : (
@@ -308,14 +366,17 @@ function CarsPageContent() {
               {filteredCars.map((car) => (
                 <div key={car.id} className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col group">
                   <div className="relative aspect-[16/10] bg-slate-50 overflow-hidden">
+                    {/* ✅ lazy loading으로 초기 로드 시간 단축 */}
                     <img
                       src={car.image}
                       alt={car.title}
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
                     />
-                    <PriceDisplay 
-                      priceUsd={car.price_usd} 
-                      className="absolute bottom-3 right-3 bg-accent text-white text-sm font-black px-2.5 py-1 rounded shadow" 
+                    <PriceDisplay
+                      priceUsd={car.price_usd}
+                      className="absolute bottom-3 right-3 bg-accent text-white text-sm font-black px-2.5 py-1 rounded shadow"
                     />
                   </div>
 
@@ -325,10 +386,10 @@ function CarsPageContent() {
                         {car.title}
                       </h3>
                       <div className="mt-2.5 grid grid-cols-2 gap-y-1.5 gap-x-2 text-xs text-slate-500">
-                        <span>Year: <strong className="text-slate-700">{car.year}</strong></span>
-                        <span>Mileage: <strong className="text-slate-700">{(car.mileage).toLocaleString()}km</strong></span>
-                        <span>Fuel: <strong className="text-slate-700">{car.fuel_type}</strong></span>
-                        <span>Trans: <strong className="text-slate-700">{car.transmission}</strong></span>
+                        <span>연식: <strong className="text-slate-700">{car.year}</strong></span>
+                        <span>주행: <strong className="text-slate-700">{car.mileage.toLocaleString()}km</strong></span>
+                        <span>연료: <strong className="text-slate-700">{car.fuel_type}</strong></span>
+                        <span>변속: <strong className="text-slate-700">{car.transmission}</strong></span>
                       </div>
                     </div>
 
@@ -354,28 +415,23 @@ function CarsPageContent() {
         </div>
       </div>
 
+      {/* 모바일 필터 드로어 */}
       {isFilterOpen && (
         <div className="fixed inset-0 z-50 flex justify-end md:hidden">
-          <div 
+          <div
             onClick={() => setIsFilterOpen(false)}
-            className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm transition-opacity" 
+            className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm transition-opacity"
           />
-
           <div className="relative w-full max-w-xs bg-white h-full shadow-2xl p-6 overflow-y-auto flex flex-col animate-in slide-in-from-right duration-300">
             <div className="flex justify-between items-center mb-6">
-              <span className="font-extrabold text-slate-900">Advanced Filters</span>
-              <button 
-                onClick={() => setIsFilterOpen(false)} 
-                className="p-1 rounded-md text-slate-400 hover:text-slate-600 cursor-pointer"
-              >
+              <span className="font-extrabold text-slate-900">상세 필터</span>
+              <button onClick={() => setIsFilterOpen(false)} className="p-1 rounded-md text-slate-400 hover:text-slate-600 cursor-pointer">
                 <X className="h-6 w-6" />
               </button>
             </div>
-
             <div className="flex-grow">
-              <FilterPanel />
+              <FilterPanel {...filterPanelProps} />
             </div>
-
             <button
               onClick={() => setIsFilterOpen(false)}
               className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold py-3 rounded-xl mt-8 shadow cursor-pointer text-sm"
@@ -392,9 +448,13 @@ function CarsPageContent() {
 export default function CarsClient() {
   return (
     <Suspense fallback={
-      <div className="flex flex-col items-center py-20 space-y-3">
-        <RefreshCw className="h-8 w-8 text-slate-400 animate-spin" />
-        <p className="text-slate-500 text-sm">Loading inventory...</p>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex-grow">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          <div className="hidden md:block bg-white p-6 rounded-2xl border border-slate-100 h-64 animate-pulse" />
+          <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}
+          </div>
+        </div>
       </div>
     }>
       <CarsPageContent />

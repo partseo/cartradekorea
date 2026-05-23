@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -62,7 +62,7 @@ const MOCK_FAVORITES = [
 
 export default function MyPage() {
   const router = useRouter()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [isLoading, setIsLoading] = useState(true)
   const [profile, setProfile] = useState<any>(null)
@@ -71,46 +71,47 @@ export default function MyPage() {
   const [activeTab, setActiveTab] = useState<'quotes' | 'favorites'>('quotes')
 
   useEffect(() => {
+    let cancelled = false
     async function loadUserData() {
       setIsLoading(true)
       try {
         const { data: { session } } = await supabase.auth.getSession()
         
         if (!session) {
-          // 비인가 상태일 경우 안내 처리 또는 목데이터 로드 (데모용)
-          setProfile(MOCK_PROFILE)
-          setQuotes(MOCK_QUOTES)
-          setFavorites(MOCK_FAVORITES)
-          setIsLoading(false)
+          if (!cancelled) {
+            setProfile(MOCK_PROFILE)
+            setQuotes(MOCK_QUOTES)
+            setFavorites(MOCK_FAVORITES)
+            setIsLoading(false)
+          }
           return
         }
 
-        // 1. 프로필 정보 가져오기
-        const { data: userProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single()
-        
-        setProfile(userProfile || MOCK_PROFILE)
+        // 3개 쿼리를 병렬로 동시 실행 (속도 최적화)
+        const [profileResult, quotesResult, favsResult] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single(),
+          supabase
+            .from('quote_requests')
+            .select('*, cars(id, title, price_usd), ports(name)')
+            .eq('buyer_id', session.user.id)
+            .order('created_at', { ascending: false }),
+          supabase
+            .from('favorites')
+            .select('*, cars(*, car_images(image_url, is_main))')
+            .eq('user_id', session.user.id)
+        ])
 
-        // 2. 견적 요청서 가져오기
-        const { data: userQuotes } = await supabase
-          .from('quote_requests')
-          .select('*, cars(id, title, price_usd), ports(name)')
-          .eq('buyer_id', session.user.id)
-          .order('created_at', { ascending: false })
-        
-        setQuotes(userQuotes || [])
+        if (cancelled) return
 
-        // 3. 관심매물 가져오기
-        const { data: userFavs } = await supabase
-          .from('favorites')
-          .select('*, cars(*, car_images(image_url, is_main))')
-          .eq('user_id', session.user.id)
-        
-        if (userFavs) {
-          const formattedFavs = userFavs.map((fav: any) => {
+        setProfile(profileResult.data || MOCK_PROFILE)
+        setQuotes(quotesResult.data || [])
+
+        if (favsResult.data) {
+          const formattedFavs = favsResult.data.map((fav: any) => {
             const mainImg = fav.cars?.car_images?.find((img: any) => img.is_main)?.image_url 
               || fav.cars?.car_images?.[0]?.image_url 
               || 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&q=80&w=600';
@@ -133,15 +134,18 @@ export default function MyPage() {
 
       } catch (err) {
         console.error(err)
-        setProfile(MOCK_PROFILE)
-        setQuotes(MOCK_QUOTES)
-        setFavorites(MOCK_FAVORITES)
+        if (!cancelled) {
+          setProfile(MOCK_PROFILE)
+          setQuotes(MOCK_QUOTES)
+          setFavorites(MOCK_FAVORITES)
+        }
       } finally {
-        setIsLoading(false)
+        if (!cancelled) setIsLoading(false)
       }
     }
     loadUserData()
-  }, [supabase])
+    return () => { cancelled = true }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // 관심매물 제거
   const handleRemoveFavorite = async (favId: string) => {
