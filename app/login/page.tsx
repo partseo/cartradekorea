@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { createClient } from '@/lib/supabase/client'
-import { Car, Lock, Mail, AlertCircle, RefreshCw } from 'lucide-react'
+import { Car, Lock, Mail, AlertCircle, RefreshCw, Eye, EyeOff } from 'lucide-react'
 
 // Zod 유효성 스키마
 const loginSchema = z.object({
@@ -23,6 +23,7 @@ export default function LoginPage() {
 
   const [isLoading, setIsLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [showPassword, setShowPassword] = useState(false)
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -82,8 +83,8 @@ export default function LoginPage() {
             <Car className="h-7 w-7 text-accent animate-bounce" />
             <span className="font-extrabold uppercase">GLOBAL<span className="text-accent">AUTO</span></span>
           </Link>
-          <h1 className="text-xl font-bold text-slate-900">Sign In to Your Account</h1>
-          <p className="text-slate-500 text-xs mt-1">Access quotes, document status, and favorite cars.</p>
+          <h1 className="text-xl font-bold text-slate-900">계정에 로그인하세요</h1>
+          <p className="text-slate-500 text-xs mt-1">견적, 문서 상태, 관심 차량 확인 등에 접근하세요.</p>
         </div>
 
         {errorMessage && (
@@ -98,7 +99,7 @@ export default function LoginPage() {
           
           {/* 이메일 */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Email Address</label>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">이메일 주소</label>
             <div className="relative">
               <Mail className="absolute left-3.5 top-3.5 h-4.5 w-4.5 text-slate-400" />
               <input
@@ -113,15 +114,22 @@ export default function LoginPage() {
 
           {/* 비밀번호 */}
           <div>
-            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Password</label>
+            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">비밀번호</label>
             <div className="relative">
               <Lock className="absolute left-3.5 top-3.5 h-4.5 w-4.5 text-slate-400" />
               <input
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 {...register('password')}
                 placeholder="••••••••"
-                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-4 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-secondary focus:bg-white text-slate-800"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-10 pr-10 py-3 text-sm focus:outline-none focus:ring-1 focus:ring-secondary focus:bg-white text-slate-800"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3 top-3 text-slate-400 hover:text-slate-600 focus:outline-none cursor-pointer"
+              >
+                {showPassword ? <EyeOff className="h-4.5 w-4.5" /> : <Eye className="h-4.5 w-4.5" />}
+              </button>
             </div>
             {errors.password && <p className="text-red-500 text-xs mt-1 font-semibold">{errors.password.message}</p>}
           </div>
@@ -135,10 +143,10 @@ export default function LoginPage() {
             {isLoading ? (
               <>
                 <RefreshCw className="h-4 w-4 animate-spin" />
-                <span>Signing In...</span>
+                <span>로그인 중...</span>
               </>
             ) : (
-              <span>Sign In</span>
+              <span>로그인</span>
             )}
           </button>
 
@@ -146,9 +154,9 @@ export default function LoginPage() {
 
         {/* 회원가입 유도 */}
         <div className="text-center mt-6 text-xs text-slate-500">
-          <span>Don't have an account? </span>
+          <span>계정이 없으신가요? </span>
           <Link href="/register" className="font-bold text-secondary hover:text-blue-700 transition">
-            Create an Account
+            계정 생성
           </Link>
         </div>
 
