@@ -1,11 +1,8 @@
-'use client'
-
-import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/server'
 import { 
-  Car, ClipboardList, MessageSquare, Ship, 
-  ArrowUpRight, Users, Plus, CheckCircle, RefreshCw 
+  Car, ClipboardList, MessageSquare, 
+  ArrowUpRight, Plus, CheckCircle 
 } from 'lucide-react'
 
 // 목데이터: Fallback 통계 수치
@@ -46,76 +43,61 @@ const MOCK_LATEST_QUOTES = [
   }
 ]
 
-export default function AdminDashboard() {
-  const supabase = createClient()
-  const [stats, setStats] = useState(MOCK_STATS)
-  const [latestQuotes, setLatestQuotes] = useState<any[]>(MOCK_LATEST_QUOTES)
-  const [isLoading, setIsLoading] = useState(true)
+export default async function AdminDashboard() {
+  const supabase = await createClient()
+  let stats = MOCK_STATS
+  let latestQuotes = MOCK_LATEST_QUOTES
 
-  useEffect(() => {
-    async function loadDashboardData() {
-      setIsLoading(true)
-      try {
-        // 1. 차량 카운트
-        const { count: totalCount } = await supabase
-          .from('cars')
-          .select('*', { count: 'exact', head: true })
+  try {
+    // 1. 차량 카운트
+    const { count: totalCount } = await supabase
+      .from('cars')
+      .select('*', { count: 'exact', head: true })
 
-        const { count: activeCount } = await supabase
-          .from('cars')
-          .select('*', { count: 'exact', head: true })
-          .eq('status', 'available')
+    const { count: activeCount } = await supabase
+      .from('cars')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'available')
 
-        // 2. 견적 카운트
-        const { count: quoteCount } = await supabase
-          .from('quote_requests')
-          .select('*', { count: 'exact', head: true })
+    // 2. 견적 카운트
+    const { count: quoteCount } = await supabase
+      .from('quote_requests')
+      .select('*', { count: 'exact', head: true })
 
-        // 3. 문의 카운트
-        const { count: inquiryCount } = await supabase
-          .from('inquiries')
-          .select('*', { count: 'exact', head: true })
-          .eq('is_resolved', false)
+    // 3. 문의 카운트
+    const { count: inquiryCount } = await supabase
+      .from('inquiries')
+      .select('*', { count: 'exact', head: true })
+      .eq('is_resolved', false)
 
-        setStats({
-          totalCars: totalCount || MOCK_STATS.totalCars,
-          activeCars: activeCount || MOCK_STATS.activeCars,
-          totalQuotes: quoteCount || MOCK_STATS.totalQuotes,
-          newInquiries: inquiryCount || MOCK_STATS.newInquiries
-        })
-
-        // 최근 견적 5개 로드
-        const { data: quotes } = await supabase
-          .from('quote_requests')
-          .select('id, buyer_name, whatsapp, created_at, status, cars(title), countries(name)')
-          .order('created_at', { ascending: false })
-          .limit(5)
-
-        if (quotes && quotes.length > 0) {
-          const formatted = quotes.map((q: any) => ({
-            id: q.id,
-            buyer_name: q.buyer_name,
-            destination_country: q.countries?.name || 'Unknown',
-            whatsapp: q.whatsapp || 'N/A',
-            created_at: q.created_at,
-            status: q.status,
-            car: { title: q.cars?.title || 'Selected Vehicle' }
-          }))
-          setLatestQuotes(formatted)
-        } else {
-          setLatestQuotes(MOCK_LATEST_QUOTES)
-        }
-
-      } catch (err) {
-        console.error(err)
-        setStats(MOCK_STATS)
-        setLatestQuotes(MOCK_LATEST_QUOTES)
-      } finally {
-        setIsLoading(false)
-      }
+    stats = {
+      totalCars: totalCount ?? MOCK_STATS.totalCars,
+      activeCars: activeCount ?? MOCK_STATS.activeCars,
+      totalQuotes: quoteCount ?? MOCK_STATS.totalQuotes,
+      newInquiries: inquiryCount ?? MOCK_STATS.newInquiries
     }
-    loadDashboardData()
-  }, [supabase])
+
+    // 최근 견적 5개 로드
+    const { data: quotes } = await supabase
+      .from('quote_requests')
+      .select('id, buyer_name, whatsapp, created_at, status, cars(title), countries(name)')
+      .order('created_at', { ascending: false })
+      .limit(5)
+
+    if (quotes && quotes.length > 0) {
+      latestQuotes = quotes.map((q: any) => ({
+        id: q.id,
+        buyer_name: q.buyer_name,
+        destination_country: q.countries?.name || 'Unknown',
+        whatsapp: q.whatsapp || 'N/A',
+        created_at: q.created_at,
+        status: q.status,
+        car: { title: q.cars?.title || 'Selected Vehicle' }
+      }))
+    }
+  } catch (err) {
+    console.error('Failed to load admin dashboard statistics on server:', err)
+  }
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -217,39 +199,32 @@ export default function AdminDashboard() {
             </Link>
           </div>
 
-          {isLoading ? (
-            <div className="flex flex-col items-center py-20 space-y-2">
-              <RefreshCw className="h-8 w-8 text-slate-500 animate-spin" />
-              <p className="text-slate-500 text-xs">Loading requests...</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-slate-300 text-sm text-left">
-                <thead>
-                  <tr className="border-b border-slate-850 text-slate-400 text-xs uppercase tracking-wider font-bold">
-                    <th className="py-3 px-4">Buyer Name</th>
-                    <th className="py-3 px-4">Vehicle Requested</th>
-                    <th className="py-3 px-4">Destination</th>
-                    <th className="py-3 px-4">WhatsApp</th>
-                    <th className="py-3 px-4">Submitted Date</th>
-                    <th className="py-3 px-4 text-right">Status</th>
+          <div className="overflow-x-auto">
+            <table className="w-full text-slate-300 text-sm text-left">
+              <thead>
+                <tr className="border-b border-slate-850 text-slate-400 text-xs uppercase tracking-wider font-bold">
+                  <th className="py-3 px-4">Buyer Name</th>
+                  <th className="py-3 px-4">Vehicle Requested</th>
+                  <th className="py-3 px-4">Destination</th>
+                  <th className="py-3 px-4">WhatsApp</th>
+                  <th className="py-3 px-4">Submitted Date</th>
+                  <th className="py-3 px-4 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-850">
+                {latestQuotes.map((q) => (
+                  <tr key={q.id} className="hover:bg-slate-800/40 transition">
+                    <td className="py-3.5 px-4 font-bold text-white">{q.buyer_name}</td>
+                    <td className="py-3.5 px-4 text-slate-200">{q.car.title}</td>
+                    <td className="py-3.5 px-4 text-slate-400">{q.destination_country}</td>
+                    <td className="py-3.5 px-4 text-slate-400">{q.whatsapp}</td>
+                    <td className="py-3.5 px-4 text-slate-500 text-xs">{new Date(q.created_at).toLocaleDateString()}</td>
+                    <td className="py-3.5 px-4 text-right">{getStatusBadge(q.status)}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-850">
-                  {latestQuotes.map((q) => (
-                    <tr key={q.id} className="hover:bg-slate-800/40 transition">
-                      <td className="py-3.5 px-4 font-bold text-white">{q.buyer_name}</td>
-                      <td className="py-3.5 px-4 text-slate-200">{q.car.title}</td>
-                      <td className="py-3.5 px-4 text-slate-400">{q.destination_country}</td>
-                      <td className="py-3.5 px-4 text-slate-400">{q.whatsapp}</td>
-                      <td className="py-3.5 px-4 text-slate-500 text-xs">{new Date(q.created_at).toLocaleDateString()}</td>
-                      <td className="py-3.5 px-4 text-right">{getStatusBadge(q.status)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
 
       </div>
