@@ -37,7 +37,7 @@ export default function LoginPage() {
     }
   }, [supabase])
 
-  const { register, handleSubmit, formState: { errors } } = useForm<LoginFormValues>({
+  const { register, handleSubmit, setValue, formState: { errors } } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: '',
@@ -80,6 +80,8 @@ export default function LoginPage() {
       window.location.href = '/admin'
     } catch (err: any) {
       setErrorMessage(getFriendlyErrorMessage(err.message))
+      // 로그인 실패 시 이메일 주소는 그대로 유지하고, 비밀번호 입력 칸만 리셋합니다.
+      setValue('password', '')
     } finally {
       setIsLoading(false)
     }
