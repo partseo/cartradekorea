@@ -11,8 +11,8 @@ import { Car, Lock, Mail, AlertCircle, RefreshCw } from 'lucide-react'
 
 // Zod 유효성 스키마
 const loginSchema = z.object({
-  email: z.string().email({ message: 'Please enter a valid email address.' }),
-  password: z.string().min(6, { message: 'Password must be at least 6 characters.' })
+  email: z.string().email({ message: '올바른 이메일 주소를 입력해 주세요.' }),
+  password: z.string().min(6, { message: '비밀번호는 최소 6글자 이상이어야 합니다.' })
 })
 
 type LoginFormValues = z.infer<typeof loginSchema>
@@ -32,6 +32,26 @@ export default function LoginPage() {
     }
   })
 
+  const getFriendlyErrorMessage = (message: string) => {
+    if (!message) return '로그인 중 오류가 발생했습니다.'
+    
+    const lowerMessage = message.toLowerCase()
+    
+    if (lowerMessage.includes('invalid login credentials') || lowerMessage.includes('invalid credentials')) {
+      return '이메일 주소 또는 비밀번호가 올바르지 않습니다. 다시 확인해 주세요.'
+    }
+    
+    if (lowerMessage.includes('email not confirmed')) {
+      return '이메일 인증이 완료되지 않았습니다. 메일함의 인증 링크를 클릭하시거나 관리자에게 문의해 주세요.'
+    }
+    
+    if (lowerMessage.includes('rate limit')) {
+      return '요청 횟수 초과입니다. 잠시 후 다시 시도해 주세요.'
+    }
+    
+    return `로그인 오류: ${message}`
+  }
+
   const onSubmit = async (values: LoginFormValues) => {
     setIsLoading(true)
     setErrorMessage(null)
@@ -46,7 +66,7 @@ export default function LoginPage() {
       router.push('/')
       router.refresh()
     } catch (err: any) {
-      setErrorMessage(err.message || 'Invalid email or password.')
+      setErrorMessage(getFriendlyErrorMessage(err.message))
     } finally {
       setIsLoading(false)
     }
