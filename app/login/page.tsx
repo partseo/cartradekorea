@@ -45,6 +45,16 @@ export default function LoginPage() {
     }
   })
 
+  // 마운트 시 localStorage에서 이메일을 불러와 기본값으로 설정
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedEmail = localStorage.getItem('last_logged_in_email')
+      if (savedEmail) {
+        setValue('email', savedEmail)
+      }
+    }
+  }, [setValue])
+
   const getFriendlyErrorMessage = (message: string) => {
     if (!message) return '로그인 중 오류가 발생했습니다.'
     
@@ -68,6 +78,12 @@ export default function LoginPage() {
   const onSubmit = async (values: LoginFormValues) => {
     setIsLoading(true)
     setErrorMessage(null)
+
+    // 로그인 시도 시 이메일을 localStorage에 저장 (로그인 튕겼을 때 보존용)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('last_logged_in_email', values.email)
+    }
+
     try {
       const { error } = await supabase.auth.signInWithPassword({
         email: values.email,

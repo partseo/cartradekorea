@@ -21,6 +21,13 @@ export default function AdminLayout({
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [debugInfo, setDebugInfo] = useState<{
+    email: string
+    uid: string
+    metaRole: string
+    dbRole: string
+    errorMsg: string
+  } | null>(null)
 
   // 1. 관리자 권한 이중 확인 (미들웨어 보완)
   useEffect(() => {
@@ -31,7 +38,13 @@ export default function AdminLayout({
       const timeoutId = setTimeout(() => {
         setIsLoading(false)
         setIsAdmin(false)
-        router.push('/login')
+        setDebugInfo(prev => ({
+          email: prev?.email || 'N/A',
+          uid: prev?.uid || 'N/A',
+          metaRole: prev?.metaRole || 'N/A',
+          dbRole: prev?.dbRole || 'N/A',
+          errorMsg: 'Supabase API 세션 확인 시간 초과 (3.5초 지연)'
+        }))
       }, 3500)
 
       try {
@@ -46,31 +59,91 @@ export default function AdminLayout({
         }
 
         // 1차 검증: 로그인 세션 메타데이터의 role 값 확인 (인증 토큰 지연 시 RLS 방어용)
-        const metaRole = user.user_metadata?.role
+        const metaRole = user.user_metadata?.role || 'None'
 
-        // 2차 검증: DB 실시간 권한 조회
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('role')
-          .eq('id', user.id)
-          .single()
+        // 2차 검증 준비
+        let dbRole = 'None'
+        let dbError: string | null = null
+
+        // 1차 검증(metaRole)이 'admin' 또는 'staff'이면 이미 권한이 충분하므로,
+        // DB를 동기적으로 강제 대기 조회하지 않고 즉시 통과시킵니다. (Short-circuit 고속화)
+        let isUserAdmin = metaRole === 'admin' || metaRole === 'staff'
+
+        setDebugInfo({
+          email: user.email || 'N/A',
+          uid: user.id,
+          metaRole: metaRole,
+          dbRole: '조회 전 (메타데이터로 선검증됨)',
+          errorMsg: 'None'
+        })
+
+        if (!isUserAdmin) {
+          try {
+            // DB 실시간 권한 조회 (메타데이터에 권한이 없는 경우 백업 검증)
+            const { data: profile, error } = await supabase
+              .from('profiles')
+              .select('role')
+              .eq('id', user.id)
+              .single()
+
+            if (error) throw error
+
+            dbRole = profile?.role || 'None'
+            isUserAdmin = dbRole === 'admin' || dbRole === 'staff'
+
+            setDebugInfo(prev => prev ? {
+              ...prev,
+              dbRole: dbRole
+            } : null)
+          } catch (dbErr: any) {
+            dbError = dbErr.message || 'Unknown database error'
+            dbRole = `조회 실패 (${dbError})`
+            
+            setDebugInfo(prev => prev ? {
+              ...prev,
+              dbRole: 'Error',
+              errorMsg: `DB 권한 조회 에러: ${dbError}`
+            } : null)
+          }
+        } else {
+          // 메타데이터로 즉시 검증 완료된 경우, DB 정보는 백그라운드에서 조용히 확인만 해둡니다.
+          ;(async () => {
+            try {
+              const { data } = await supabase
+                .from('profiles')
+                .select('role')
+                .eq('id', user.id)
+                .single()
+              if (data) {
+                setDebugInfo(prev => prev ? { ...prev, dbRole: data.role || 'None' } : null)
+              }
+            } catch (err) {
+              // 백그라운드 확인 중 에러는 조용히 무시합니다.
+            }
+          })()
+        }
 
         clearTimeout(timeoutId)
-        
-        const isUserAdmin = (profile && (profile.role === 'admin' || profile.role === 'staff')) || 
-                            (metaRole === 'admin' || metaRole === 'staff')
 
         if (isUserAdmin) {
           setIsAdmin(true)
         } else {
           setIsAdmin(false)
-          // 일반 바이어 계정인 경우 즉시 메인 페이지로 추방
-          router.push('/')
+          setDebugInfo(prev => prev ? { 
+            ...prev, 
+            errorMsg: `허용되지 않은 역할(Role)입니다. (필요: admin/staff, 현재: meta=${metaRole}, db=${dbRole})` 
+          } : null)
         }
-      } catch (e) {
+      } catch (e: any) {
         clearTimeout(timeoutId)
         setIsAdmin(false)
-        router.push('/')
+        setDebugInfo(prev => ({
+          email: prev?.email || 'N/A',
+          uid: prev?.uid || 'N/A',
+          metaRole: prev?.metaRole || 'N/A',
+          dbRole: prev?.dbRole || 'N/A',
+          errorMsg: `시스템 오류: ${e.message || 'Unknown error'}`
+        }))
       } finally {
         setIsLoading(false)
       }
@@ -106,8 +179,43 @@ export default function AdminLayout({
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-950 text-white p-6 text-center">
         <ShieldAlert className="h-16 w-16 text-red-500 mb-4 animate-bounce" />
-        <h1 className="text-2xl font-black">Access Denied</h1>
-        <p className="text-slate-400 text-sm mt-2 max-w-sm">You do not have permission to access the administrator console. Redirecting to home...</p>
+        <h1 className="text-2xl font-black text-red-500">Access Denied (접근 거부됨)</h1>
+        <p className="text-slate-400 text-sm mt-2 max-w-md">
+          관리자 콘솔에 접근할 수 있는 권한이 없습니다. 계정의 권한 설정을 점검해 주십시오.
+        </p>
+
+        {/* 상세 디버그 진단 박스 */}
+        {debugInfo && (
+          <div className="mt-6 w-full max-w-lg bg-slate-900 border border-red-900/50 rounded-xl p-5 text-left text-xs font-mono space-y-2 text-slate-300 shadow-xl mx-auto">
+            <h3 className="text-red-400 font-bold border-b border-slate-800 pb-2 mb-2 uppercase tracking-wider text-[11px]">🔧 접근 제어 진단 데이터 (Diagnostic Info)</h3>
+            <div className="flex justify-between py-1 border-b border-slate-800/50"><span className="text-slate-500">계정 이메일:</span> <span className="text-white font-bold">{debugInfo.email}</span></div>
+            <div className="flex justify-between py-1 border-b border-slate-800/50"><span className="text-slate-500">사용자 UUID:</span> <span className="text-slate-400">{debugInfo.uid}</span></div>
+            <div className="flex justify-between py-1 border-b border-slate-800/50"><span className="text-slate-500">세션 메타 권한 (JWT):</span> <span className="text-amber-400 font-bold">{debugInfo.metaRole}</span></div>
+            <div className="flex justify-between py-1 border-b border-slate-800/50"><span className="text-slate-500">실시간 DB 권한 (Profiles):</span> <span className="text-amber-400 font-bold">{debugInfo.dbRole}</span></div>
+            <div className="pt-3.5 mt-2">
+              <span className="text-slate-500 block mb-1">상세 진단 에러 내용:</span>
+              <p className="text-red-400 bg-red-950/30 p-2.5 rounded border border-red-900/30 break-all leading-normal whitespace-pre-wrap font-sans">
+                {debugInfo.errorMsg}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 조치 버튼들 */}
+        <div className="mt-8 flex gap-4 justify-center">
+          <Link
+            href="/login"
+            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+          >
+            다른 계정으로 로그인
+          </Link>
+          <Link
+            href="/"
+            className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-bold transition cursor-pointer"
+          >
+            메인 페이지로 이동
+          </Link>
+        </div>
       </div>
     )
   }

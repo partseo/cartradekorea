@@ -40,15 +40,10 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
-    // profiles 테이블에서 권한(role) 조회
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    // admin 또는 staff가 아니면 접근 차단 후 메인 페이지로 리다이렉트
-    if (!profile || (profile.role !== 'admin' && profile.role !== 'staff')) {
+    // 미들웨어의 지연 및 RLS 꼬임을 방지하기 위해 user_metadata 내의 role을 기반으로 1차 고속 검증합니다.
+    // 실시간 DB 검증 및 상세 오류 디버깅은 클라이언트인 AdminLayout(layout.tsx)에서 처리합니다.
+    const metaRole = user.user_metadata?.role
+    if (metaRole !== 'admin' && metaRole !== 'staff') {
       const url = request.nextUrl.clone()
       url.pathname = '/'
       return NextResponse.redirect(url)
