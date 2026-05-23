@@ -45,6 +45,10 @@ export default function AdminLayout({
           return
         }
 
+        // 1차 검증: 로그인 세션 메타데이터의 role 값 확인 (인증 토큰 지연 시 RLS 방어용)
+        const metaRole = user.user_metadata?.role
+
+        // 2차 검증: DB 실시간 권한 조회
         const { data: profile } = await supabase
           .from('profiles')
           .select('role')
@@ -52,7 +56,11 @@ export default function AdminLayout({
           .single()
 
         clearTimeout(timeoutId)
-        if (profile && (profile.role === 'admin' || profile.role === 'staff')) {
+        
+        const isUserAdmin = (profile && (profile.role === 'admin' || profile.role === 'staff')) || 
+                            (metaRole === 'admin' || metaRole === 'staff')
+
+        if (isUserAdmin) {
           setIsAdmin(true)
         } else {
           setIsAdmin(false)
