@@ -64,8 +64,8 @@ export default function LoginPage() {
 
       if (error) throw error
 
-      router.push('/')
-      router.refresh()
+      // 로그인 성공 시 세션이 꼬이는 것을 방지하고 바로 대시보드로 이동하기 위해 강제 페이지 이동(Hard Navigation)을 사용합니다.
+      window.location.href = '/admin'
     } catch (err: any) {
       setErrorMessage(getFriendlyErrorMessage(err.message))
     } finally {
