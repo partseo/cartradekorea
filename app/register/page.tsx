@@ -11,13 +11,13 @@ import { Car, UserCheck, AlertCircle, RefreshCw } from 'lucide-react'
 
 // Zod 회원가입 검증 스키마 (z.enum의 컴파일 매개변수 에러 수정)
 const registerSchema = z.object({
-  email: z.string().email({ message: 'Please enter a valid email address.' }),
-  password: z.string().min(6, { message: 'Password must be at least 6 characters.' }),
-  full_name: z.string().min(2, { message: 'Full name must be at least 2 characters.' }),
+  email: z.string().email({ message: '올바른 이메일 주소를 입력해 주세요.' }),
+  password: z.string().min(6, { message: '비밀번호는 최소 6글자 이상이어야 합니다.' }),
+  full_name: z.string().min(2, { message: '이름은 최소 2글자 이상이어야 합니다.' }),
   company_name: z.string().optional(),
   whatsapp: z.string().optional(),
   role: z.enum(['buyer', 'dealer']),
-  country: z.string().min(2, { message: 'Please enter your country.' })
+  country: z.string().min(2, { message: '국가를 입력해 주세요.' })
 })
 
 type RegisterFormValues = z.infer<typeof registerSchema>
@@ -43,6 +43,41 @@ export default function RegisterPage() {
     }
   })
 
+  const getFriendlyErrorMessage = (message: string) => {
+    if (!message) return '회원가입 중 오류가 발생했습니다.'
+    
+    const lowerMessage = message.toLowerCase()
+    
+    if (
+      lowerMessage.includes('already registered') || 
+      lowerMessage.includes('user already exists') || 
+      lowerMessage.includes('already exists') ||
+      lowerMessage.includes('duplicate key')
+    ) {
+      return '이미 가입된 이메일 주소입니다. 로그인 페이지를 이용하시거나 다른 이메일로 가입해 주세요.'
+    }
+    
+    if (lowerMessage.includes('database error saving new user')) {
+      return '이미 등록된 이메일이거나 데이터베이스 저장 과정에서 오류가 발생했습니다. (이미 동일한 이메일로 가입되어 있을 수 있으니 로그인을 시도해 보세요.)'
+    }
+    
+    if (lowerMessage.includes('password should be at least')) {
+      const match = message.match(/\d+/)
+      const length = match ? match[0] : '6'
+      return `비밀번호는 최소 ${length}글자 이상이어야 합니다.`
+    }
+    
+    if (lowerMessage.includes('password should contain')) {
+      return '비밀번호가 보안 규칙에 맞지 않습니다. 대문자, 소문자, 숫자, 특수문자를 적절히 조합해 주세요.'
+    }
+    
+    if (lowerMessage.includes('rate limit')) {
+      return '요청 횟수 초과입니다. 잠시 후 다시 시도해 주세요.'
+    }
+    
+    return `회원가입 오류: ${message}`
+  }
+
   const onSubmit = async (values: RegisterFormValues) => {
     setIsLoading(true)
     setErrorMessage(null)
@@ -64,7 +99,7 @@ export default function RegisterPage() {
 
       if (error) throw error
 
-      setSuccessMessage('Registration successful! Please check your email for the confirmation link.')
+      setSuccessMessage('회원가입이 완료되었습니다! 가입 승인 및 설정을 위해 메일을 확인하시거나 관리자에게 문의해 주세요.')
       
       setTimeout(() => {
         router.push('/')
@@ -72,7 +107,7 @@ export default function RegisterPage() {
       }, 3000)
 
     } catch (err: any) {
-      setErrorMessage(err.message || 'An error occurred during registration.')
+      setErrorMessage(getFriendlyErrorMessage(err.message))
     } finally {
       setIsLoading(false)
     }
