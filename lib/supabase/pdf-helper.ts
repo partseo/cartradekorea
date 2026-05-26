@@ -1,5 +1,5 @@
-import { jsPDF } from 'jspdf'
-import { createClient } from './client'
+// ✅ jspdf 동적 import — 바이어 public 번들에서 제외
+// import { jsPDF } from 'jspdf'  ← 정적 import 제거 (번들 500KB+ 감소)
 
 interface QuoteDetail {
   vehicle_price: number
@@ -30,10 +30,23 @@ interface PDFPayload {
   stock_number?: string
 }
 
-// 1. Quotation PDF 생성 및 업로드 함수
-export async function createAndUploadQuotationPDF(payload: PDFPayload): Promise<string> {
+// 환경변수 기반 회사 설정 정보 취득 헬퍼
+function getCompanyConfig() {
+  return {
+    name: process.env.NEXT_PUBLIC_COMPANY_NAME || 'Car Trade Korea',
+    email: process.env.NEXT_PUBLIC_COMPANY_EMAIL || 'export@cartradekorea.com',
+    whatsapp: process.env.NEXT_PUBLIC_COMPANY_WHATSAPP || '+82-10-0000-0000',
+    address: process.env.NEXT_PUBLIC_COMPANY_ADDRESS || 'Incheon Port Yard 3, Incheon, South Korea',
+    vatId: process.env.NEXT_PUBLIC_COMPANY_VAT_ID || '120-81-12345'
+  }
+}
+
+// 1. Quotation PDF 생성 함수 (바이트 데이터 반환)
+export async function generateQuotationPDF(payload: PDFPayload): Promise<Uint8Array> {
+  const { jsPDF } = await import('jspdf')
   const doc = new jsPDF()
   const detail = payload.quoteDetail
+  const company = getCompanyConfig()
 
   // 스타일 설정
   doc.setFont('helvetica', 'normal')
@@ -41,7 +54,7 @@ export async function createAndUploadQuotationPDF(payload: PDFPayload): Promise<
   // 헤더 로고 & 타이틀
   doc.setFontSize(22)
   doc.setTextColor(30, 41, 59) // slate-800
-  doc.text('GLOBAL AUTO EXPORT', 14, 20)
+  doc.text(company.name.toUpperCase(), 14, 20)
   
   doc.setFontSize(10)
   doc.setTextColor(100, 116, 139) // slate-500
@@ -60,10 +73,10 @@ export async function createAndUploadQuotationPDF(payload: PDFPayload): Promise<
   doc.setTextColor(71, 85, 105)
   doc.text('FROM:', 14, 42)
   doc.setFont('helvetica', 'bold')
-  doc.text('GLOBAL AUTO EXPORT LTD.', 14, 48)
+  doc.text(`${company.name} LTD.`, 14, 48)
   doc.setFont('helvetica', 'normal')
-  doc.text('Incheon Port Yard 3, Incheon, South Korea', 14, 54)
-  doc.text('Email: export@globalauto.com | WhatsApp: +82-10-1234-5678', 14, 60)
+  doc.text(company.address, 14, 54)
+  doc.text(`Email: ${company.email} | WhatsApp: ${company.whatsapp}`, 14, 60)
 
   doc.text('PREPARED FOR:', 110, 42)
   doc.setFont('helvetica', 'bold')
@@ -153,22 +166,24 @@ export async function createAndUploadQuotationPDF(payload: PDFPayload): Promise<
   doc.text('Authorized Signature / Export Director', 130, y)
   doc.line(130, y + 10, 190, y + 10)
 
-  // Blob 생성
-  const pdfBlob = doc.output('blob')
-  return await uploadPDFToStorage(payload.quoteId, 'Quotation', pdfBlob)
+  // ArrayBuffer로 변환하여 반환
+  const pdfBytes = doc.output('arraybuffer')
+  return new Uint8Array(pdfBytes)
 }
 
-// 2. Proforma Invoice PDF 생성 및 업로드 함수
-export async function createAndUploadInvoicePDF(payload: PDFPayload): Promise<string> {
+// 2. Proforma Invoice PDF 생성 함수 (바이트 데이터 반환)
+export async function generateInvoicePDF(payload: PDFPayload): Promise<Uint8Array> {
+  const { jsPDF } = await import('jspdf')
   const doc = new jsPDF()
   const detail = payload.quoteDetail
+  const company = getCompanyConfig()
 
   doc.setFont('helvetica', 'normal')
   
   // 헤더 로고 & 타이틀
   doc.setFontSize(22)
   doc.setTextColor(30, 41, 59)
-  doc.text('GLOBAL AUTO EXPORT', 14, 20)
+  doc.text(company.name.toUpperCase(), 14, 20)
   
   doc.setFontSize(18)
   doc.setTextColor(15, 118, 110) // teal-700
@@ -181,10 +196,10 @@ export async function createAndUploadInvoicePDF(payload: PDFPayload): Promise<st
   doc.setFontSize(10)
   doc.text('EXPORTER (FROM):', 14, 42)
   doc.setFont('helvetica', 'bold')
-  doc.text('GLOBAL AUTO EXPORT LTD.', 14, 48)
+  doc.text(`${company.name} LTD.`, 14, 48)
   doc.setFont('helvetica', 'normal')
-  doc.text('Incheon Port Yard 3, Incheon, South Korea', 14, 54)
-  doc.text('Tel: +82-10-1234-5678 | VAT ID: 120-81-12345', 14, 60)
+  doc.text(company.address, 14, 54)
+  doc.text(`Tel: ${company.whatsapp} | VAT ID: ${company.vatId}`, 14, 60)
 
   doc.text('CONSIGNEE (TO):', 110, 42)
   doc.setFont('helvetica', 'bold')
@@ -233,7 +248,7 @@ export async function createAndUploadInvoicePDF(payload: PDFPayload): Promise<st
   doc.rect(14, y, 182, 7, 'F')
   doc.text(headers[0], 16, y + 5)
   doc.text(headers[1], 35, y + 5)
-  doc.text(headers[120] ? 'Qty' : 'Qty', 115, y + 5)
+  doc.text('Qty', 115, y + 5)
   doc.text('Unit Price', 135, y + 5)
   doc.text('Total USD', 165, y + 5)
 
@@ -249,29 +264,29 @@ export async function createAndUploadInvoicePDF(payload: PDFPayload): Promise<st
   y += 18
   doc.line(14, y, 196, y)
   
-  // 송금 은행 가이드 (Wire Transfer Instruction)
+  // 송금 은행 가이드 (보안 강화를 위해 민감한 실계좌번호 노출을 환경변수 또는 계약 후 개별송부로 전환)
   y += 8
   doc.setFont('helvetica', 'bold')
-  doc.text('BANK WIRE TRANSFER INSTRUCTION (IMPORTANT)', 14, y)
+  doc.text('BANK WIRE TRANSFER INSTRUCTION (SECURITY REASSURED)', 14, y)
   y += 6
   doc.setFont('helvetica', 'normal')
-  doc.text('Please transfer the total amount to the exporter bank account below:', 14, y)
+  doc.text('To assure transaction security, official bank wire info is sent individually.', 14, y)
   
   y += 6
   doc.setFillColor(248, 250, 252) // light grey bg
   doc.rect(14, y, 182, 32, 'F')
   
   doc.setFont('helvetica', 'bold')
-  doc.text('Beneficiary Bank:', 18, y + 6)
-  doc.text('Account Number:', 18, y + 12)
-  doc.text('SWIFT Code:', 18, y + 18)
+  doc.text('Exporters Bank Routing Info:', 18, y + 6)
+  doc.text('Official Account Details:', 18, y + 12)
+  doc.text('Notice:', 18, y + 18)
   doc.text('Beneficiary Name:', 18, y + 24)
 
   doc.setFont('helvetica', 'normal')
-  doc.text('KOREA EXIM BANK (SEOUL MAIN BRANCH)', 55, y + 6)
-  doc.text('123-4567-8901-23 (USD Account Only)', 55, y + 12)
-  doc.text('KOEXKRSEXXX', 55, y + 18)
-  doc.text('GLOBAL AUTO EXPORT LTD.', 55, y + 24)
+  doc.text(process.env.NEXT_PUBLIC_BANK_NAME || 'KOREA EXIM BANK (SEOUL BRANCH)', 75, y + 6)
+  doc.text('To be shared separately after contract check (계약 체결 후 별도 제공)', 75, y + 12)
+  doc.text('Please verify matching wire bank names with export@cartradekorea.com', 75, y + 18)
+  doc.text(`${company.name} CO., LTD.`, 75, y + 24)
 
   // 유효기간 및 싸인
   y += 42
@@ -281,45 +296,8 @@ export async function createAndUploadInvoicePDF(payload: PDFPayload): Promise<st
   doc.text('Authorized Exporter Representative Signature', 120, y)
   doc.line(120, y + 10, 190, y + 10)
 
-  // Blob 생성
-  const pdfBlob = doc.output('blob')
-  return await uploadPDFToStorage(payload.quoteId, 'Proforma_Invoice', pdfBlob)
+  // ArrayBuffer로 변환하여 반환
+  const pdfBytes = doc.output('arraybuffer')
+  return new Uint8Array(pdfBytes)
 }
 
-// 3. 내부 공통 Supabase Storage 업로드 헬퍼
-async function uploadPDFToStorage(quoteId: string, docName: string, blob: Blob): Promise<string> {
-  const supabase = createClient()
-  const fileName = `${quoteId}/${docName}_${Date.now()}.pdf`
-
-  // Storage private bucket 'export-documents' 에 업로드
-  const { error: uploadError } = await supabase.storage
-    .from('export-documents')
-    .upload(fileName, blob, {
-      contentType: 'application/pdf',
-      upsert: true
-    })
-
-  if (uploadError) throw uploadError
-
-  // Signed URL 또는 Public URL을 가져옵니다. 
-  // 여기서는 export-documents 가 Private 버킷이므로 Signed URL(60일 유효)을 생성하여 DB에 박아넣습니다.
-  const { data: signedData, error: signError } = await supabase.storage
-    .from('export-documents')
-    .createSignedUrl(fileName, 60 * 24 * 3600) // 60일 유효
-
-  if (signError) throw signError
-  const fileUrl = signedData.signedUrl
-
-  // export_documents 테이블에 생성 로그 및 링크 등록
-  const { error: dbError } = await supabase
-    .from('export_documents')
-    .insert({
-      quote_request_id: quoteId,
-      document_name: docName.replace('_', ' '),
-      file_url: fileUrl
-    })
-
-  if (dbError) throw dbError
-
-  return fileUrl
-}

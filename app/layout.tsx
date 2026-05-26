@@ -17,18 +17,18 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Global Auto Export | Premium Korean Used Cars Worldwide",
-    template: "%s | Global Auto Export"
+    default: "Car Trade Korea | Premium Korean Used Cars Worldwide",
+    template: "%s | Car Trade Korea"
   },
-  description: "Global Auto Export is a premium used car export platform. Easily browse, search, and get instant FOB/CIF shipping quotes for high-quality Korean used cars.",
+  description: "Car Trade Korea is a premium used car export platform. Easily browse, search, and get instant FOB/CIF shipping quotes for high-quality Korean used cars.",
   keywords: ["used cars export", "Korean used cars", "buy used cars South Korea", "Hyundai used cars export", "Kia used cars export"],
   openGraph: {
-    title: "Global Auto Export | Premium Korean Used Cars Worldwide",
+    title: "Car Trade Korea | Premium Korean Used Cars Worldwide",
     description: "Export high-quality Korean used cars directly from Incheon/Busan port. Get instant FOB/CIF quotations.",
     type: "website",
     locale: "en_US",
-    url: "https://www.globalautoexport.com",
-    siteName: "Global Auto Export"
+    url: "https://www.cartradekorea.com",
+    siteName: "Car Trade Korea"
   }
 };
 

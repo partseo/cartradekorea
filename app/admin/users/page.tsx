@@ -3,7 +3,7 @@
 import { Users, Shield, UserCheck } from 'lucide-react'
 
 const MOCK_USERS = [
-  { id: 'u-1', name: 'Super Admin', email: 'admin@globalauto.com', role: 'admin', company: 'GlobalAuto HQ' },
+  { id: 'u-1', name: 'Super Admin', email: 'admin@cartradekorea.com', role: 'admin', company: 'Car Trade Korea' },
   { id: 'u-2', name: 'Kim Dealer', email: 'kim@dealer.co.kr', role: 'dealer', company: 'Incheon Auto Export' },
   { id: 'u-3', name: 'Alex Kofi', email: 'alex.kofi@gmail.com', role: 'buyer', company: 'Accra Auto Imports' }
 ]

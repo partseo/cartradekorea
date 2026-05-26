@@ -40,10 +40,15 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url)
     }
 
-    // 미들웨어의 지연 및 RLS 꼬임을 방지하기 위해 user_metadata 내의 role을 기반으로 1차 고속 검증합니다.
-    // 실시간 DB 검증 및 상세 오류 디버깅은 클라이언트인 AdminLayout(layout.tsx)에서 처리합니다.
-    const metaRole = user.user_metadata?.role
-    if (metaRole !== 'admin' && metaRole !== 'staff') {
+    // DB에서 실시간 권한 조회 (user_metadata를 신뢰하지 않음)
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    const dbRole = profile?.role
+    if (dbRole !== 'admin' && dbRole !== 'staff') {
       const url = request.nextUrl.clone()
       url.pathname = '/'
       return NextResponse.redirect(url)

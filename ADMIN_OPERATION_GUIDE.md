@@ -125,7 +125,7 @@
    - API Key 유출 또는 누탈 의심 시: 즉각 인프라 관리자에게 보고 후 [TROUBLESHOOTING.md](file:///c:/Users/User/Antigravity/used-car-export-platform/TROUBLESHOOTING.md)의 **1. API Key 회전 절차**를 즉각 수행합니다.
    - RLS 정책 위반 경고 발생 시: Supabase Console SQL Editor에서 `ALTER TABLE` 명령으로 RLS 및 Policies 규칙을 검사합니다.
 3. **3단계: 기술 지원 및 개발 파트너 비상 연락망**
-   - 시스템 관리자 직통 이메일: `dev-support@globalauto.com`
+   - 시스템 관리자 직통 이메일: `support@cartradekorea.com`
    - 비상 핫라인: +82-10-9876-5432 (DevOps Lead)
 
 ---

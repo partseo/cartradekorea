@@ -15,7 +15,7 @@
 - **하이픈(-) 지양**: 가능하면 하이픈이 없는 형태가 검색엔진 최적화(SEO) 및 브라우저 주소창 입력에 편리합니다.
 
 ### 2) 추천 도메인 후보군 예시
-- `globalcarexport.com` (가장 직관적이며 글로벌형)
+- `cartradekorea.com` (가장 직관적이며 글로벌형)
 - `koreautotrade.com` (B2B 신뢰감 우선)
 - `koreacarexport.com` (한국 원산지 강조형)
 - `koreacartrade.com`
@@ -32,7 +32,7 @@
 
 1. **Cloudflare 로그인 및 사이트 추가**:
    - Cloudflare Dashboard (`https://dash.cloudflare.com`)에 로그인 후 **Add a Site** 버튼을 클릭합니다.
-   - 구매한 도메인 주소(예: `globalcarexport.com`)를 입력하고 무료 플랜(Free Plan)을 선택합니다.
+   - 구매한 도메인 주소(예: `cartradekorea.com`)를 입력하고 무료 플랜(Free Plan)을 선택합니다.
 2. **네임서버(Nameservers) 변경**:
    - Cloudflare가 제시하는 2개의 네임서버 주소(예: `alice.ns.cloudflare.com`, `bob.ns.cloudflare.com`)를 복사합니다.
    - 도메인을 구매한 대행업체(가비아 등) 사이트의 도메인 관리 메뉴로 이동하여 기존 네임서버 주소를 Cloudflare 네임서버로 변경 입력합니다.
@@ -58,7 +58,7 @@
    - **Deploy** 버튼을 누르고 약 2~3분간 빌드 및 컴파일을 완료하여 Vercel 기본 주소(예: `used-car-export-platform.vercel.app`)로 접속이 정상 작동하는지 확인합니다.
 4. **Vercel 커스텀 도메인 매핑**:
    - Vercel 프로젝트 화면의 **Settings** > **Domains** 메뉴로 이동합니다.
-   - 구매한 최종 도메인 주소 `www.globalcarexport.com`을 입력하고 Add를 클릭합니다. (Vercel이 제시하는 DNS 정보: CNAME 레코드 이름 `www`, 값 `cname.vercel-dns.com`을 기록해 둡니다.)
+   - 구매한 최종 도메인 주소 `www.cartradekorea.com`을 입력하고 Add를 클릭합니다. (Vercel이 제시하는 DNS 정보: CNAME 레코드 이름 `www`, 값 `cname.vercel-dns.com`을 기록해 둡니다.)
 5. **Cloudflare DNS 레코드 최종 주입**:
    - Cloudflare DNS 설정으로 돌아가 아래 CNAME 레코드 2개를 주입합니다.
 
@@ -75,7 +75,7 @@
 
 1. **상용 프로젝트 생성**:
    - Supabase Dashboard (`https://supabase.com/dashboard`)에서 **New Project**를 누릅니다.
-   - 프로젝트명(예: `Global Auto Export Prod`)을 입력하고 데이터베이스 비밀번호를 안전하게 생성 및 메모해 둡니다. Region은 한국 리전(`Seoul`)을 지정합니다.
+   - 프로젝트명(예: `Car Trade Korea Prod`)을 입력하고 데이터베이스 비밀번호를 안전하게 생성 및 메모해 둡니다. Region은 한국 리전(`Seoul`)을 지정합니다.
 2. **Schema 배포 (마이그레이션)**:
    - 로컬 터미널에서 Supabase CLI를 운영 프로젝트와 연동합니다.
      ```bash
@@ -102,7 +102,7 @@ Vercel 서버에서 운영용 Supabase 및 서드파티 API(Resend 등)를 안�
 | `NEXT_PUBLIC_SUPABASE_URL` | **가능** | `https://운영프로젝트ID.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **가능** | *운영 프로젝트의 anon public key 값* |
 | `SUPABASE_SERVICE_ROLE_KEY` | **불가 (서버전용)** | *운영 프로젝트의 service_role secret key 값 (절대 NEXT_PUBLIC_ 금지)* |
-| `NEXT_PUBLIC_SITE_URL` | **가능** | `https://www.globalcarexport.com` |
+| `NEXT_PUBLIC_SITE_URL` | **가능** | `https://www.cartradekorea.com` |
 | `RESEND_API_KEY` | **불가 (서버전용)** | *운영용 Resend API Key* |
 | `NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER` | **가능** | *실제 바이어 응대용 WhatsApp 번호 (e.g. 821000000000)* |
 
@@ -134,7 +134,7 @@ Vercel 서버에서 운영용 Supabase 및 서드파티 API(Resend 등)를 안�
 최초의 시스템 어드민을 데이터베이스에 승인하는 마스터 작업 지침입니다.
 
 1. **사용자 가입**:
-   - 운영 호스트 도메인 (`https://www.globalcarexport.com/register`)에 접속하여 최고 관리자용 이메일(예: `admin@globalcarexport.com`)로 신규 가입을 처리합니다.
+   - 운영 호스트 도메인 (`https://www.cartradekorea.com/register`)에 접속하여 최고 관리자용 이메일(예: `admin@cartradekorea.com`)로 신규 가입을 처리합니다.
 2. **데이터베이스 SQL Editor 접속**:
    - Supabase Console의 **SQL Editor**로 이동해 신규 쿼리 창을 엽니다.
 3. **어드민 권한 업데이트 및 이력 로그 수동 기록**:
@@ -143,20 +143,20 @@ Vercel 서버에서 운영용 Supabase 및 서드파티 API(Resend 등)를 안�
      -- 1. profiles 테이블 내 관리자 권한 강제 승격
      UPDATE public.profiles 
      SET role = 'admin' 
-     WHERE email = 'admin@globalcarexport.com';
+     WHERE email = 'admin@cartradekorea.com';
 
      -- 2. 최초 1회 수동 승격에 대한 보안 감사 감사 로그 수집 기록
      INSERT INTO public.admin_logs (admin_id, action, target_table, record_id, details)
      VALUES (
-       (SELECT id FROM public.profiles WHERE email = 'admin@globalcarexport.com'),
+       (SELECT id FROM public.profiles WHERE email = 'admin@cartradekorea.com'),
        'PROMOTE_INITIAL_ADMIN',
        'profiles',
-       (SELECT id FROM public.profiles WHERE email = 'admin@globalcarexport.com'),
+       (SELECT id FROM public.profiles WHERE email = 'admin@cartradekorea.com'),
        '{"details": "System setup: Initial administrator role promoted via SQL Editor manually."}'
      );
      ```
 4. **관리자 대시보드 검증**:
-   - 어드민 주소 (`https://www.globalcarexport.com/admin`)로 진입 시 차단되지 않고 관리자 대시보드가 정상 렌더링되는지 확인합니다.
+   - 어드민 주소 (`https://www.cartradekorea.com/admin`)로 진입 시 차단되지 않고 관리자 대시보드가 정상 렌더링되는지 확인합니다.
 
 ---
 
@@ -194,14 +194,14 @@ Vercel 서버에서 운영용 Supabase 및 서드파티 API(Resend 등)를 안�
 포탈 검색 사이트에 플랫폼 경로가 효율적으로 수집되도록 색인을 연동하는 절차입니다.
 
 1. **Search Console 추가**:
-   - Google Search Console (`https://search.google.com/search-console`) 접속 후 **도메인 속성** 추가를 클릭하고 `globalcarexport.com`을 입력합니다.
+   - Google Search Console (`https://search.google.com/search-console`) 접속 후 **도메인 속성** 추가를 클릭하고 `cartradekorea.com`을 입력합니다.
 2. **소유권 인증**:
    - 발급된 TXT 인증 레코드 주소를 복사합니다.
    - Cloudflare DNS 관리 메뉴로 이동하여 **TXT 레코드** (Name: `@`, Value: *복사한 인증값*)를 주입 후 저장합니다.
    - Search Console 화면에서 **확인**을 눌러 소유권 인증을 통과합니다.
 3. **Sitemap 제출**:
    - Search Console 내의 **Sitemaps** 메뉴로 가셔서 `sitemap.xml`을 입력하고 제출합니다.
-   - `sitemap.xml` 및 `robots.txt`가 라이브 도메인 상에서 정상 호출되는지 직접 주소창에 `https://www.globalcarexport.com/sitemap.xml`을 입력하여 로드 상태를 검토합니다.
+   - `sitemap.xml` 및 `robots.txt`가 라이브 도메인 상에서 정상 호출되는지 직접 주소창에 `https://www.cartradekorea.com/sitemap.xml`을 입력하여 로드 상태를 검토합니다.
 
 ---
 

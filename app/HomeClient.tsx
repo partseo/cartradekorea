@@ -2,10 +2,15 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useSettings } from '@/lib/supabase/settings-context'
 import { Search, ArrowRight, Ship, Globe, MessageCircle, Star, ShieldCheck, FileCheck } from 'lucide-react'
+
+// 이미지 로드 실패 시 폴백 URL
+const HERO_IMAGE_URL = 'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&q=80&w=1920'
+const CAR_IMAGE_FALLBACK = 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&q=80&w=600'
 
 // 목데이터: 추천 매물 6종
 const RECOMMENDED_CARS = [
@@ -96,9 +101,10 @@ export default function HomeClient() {
   useEffect(() => {
     async function fetchLatestCars() {
       try {
+        // ✅ 필요한 컬럼만 선택 — select('*') 제거로 페이로드 감소
         const { data } = await supabase
           .from('cars')
-          .select('*, car_images(image_url, is_main)')
+          .select('id, title, brand, year, mileage, fuel_type, transmission, price_usd, car_images(image_url, is_main)')
           .eq('status', 'available')
           .order('created_at', { ascending: false })
           .limit(6)
@@ -107,7 +113,7 @@ export default function HomeClient() {
           const formatted = data.map((car: any) => {
             const mainImg = car.car_images?.find((img: any) => img.is_main)?.image_url 
               || car.car_images?.[0]?.image_url 
-              || 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&q=80&w=600';
+              || CAR_IMAGE_FALLBACK;
             return {
               id: car.id,
               title: car.title,
@@ -140,7 +146,7 @@ export default function HomeClient() {
 
   const displayedCars = dbCars.length > 0 ? dbCars : RECOMMENDED_CARS
   const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER || '821000000000'
-  const whatsappUrl = `https://wa.me/${whatsappNumber}?text=Hello,%20I%20am%20interested%20in%20purchasing%20a%20used%2520car%20from%20GlobalAuto.`
+  const whatsappUrl = `https://wa.me/${whatsappNumber}?text=Hello,%20I%20am%20interested%20in%20purchasing%20a%20used%2520car%20from%20Car%20Trade%20Korea.`
 
   return (
     <div className="relative min-h-screen bg-slate-50 flex flex-col">
@@ -149,10 +155,17 @@ export default function HomeClient() {
       <section className="relative bg-slate-900 text-white overflow-hidden py-24 sm:py-32">
         <div className="absolute inset-0 z-0 opacity-40">
           <div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-900 to-transparent z-10" />
-          <img
-            src="https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&q=80&w=1920"
+          {/* ✅ LCP 이미지 — priority로 즉시 로드, fill+object-cover로 layout shift 방지 */}
+          <Image
+            src={HERO_IMAGE_URL}
             alt="Premium Korean Used Cars"
-            className="w-full h-full object-cover"
+            fill
+            priority
+            quality={85}
+            sizes="100vw"
+            className="object-cover"
+            placeholder="blur"
+            blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARCAAIAAoDASIAAhEBAxEB/8QAFgABAQEAAAAAAAAAAAAAAAAABQQD/8QAIRAAAAcAAgMBAAAAAAAAAAAAAQIDBBEABRIhMVH/xAAUAQEAAAAAAAAAAAAAAAAAAAAA/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEQMRAD8AzMFVkpbLJ2kSVRF+7mV5GujzrDolWMBE8h5kqe+y0hEVIhYhEPqAFPUGwpuVAGgD/9k="
           />
         </div>
 
@@ -257,15 +270,20 @@ export default function HomeClient() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {displayedCars.map((car) => (
+          {displayedCars.map((car, index) => (
             <div key={car.id} className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-md hover:shadow-xl transition-all duration-300 flex flex-col group">
               <div className="relative aspect-[16/10] bg-slate-100 overflow-hidden">
-                <img
-                  src={car.image}
+                {/* ✅ next/image — WebP/AVIF 자동, 반응형 sizes, lazy loading */}
+                <Image
+                  src={car.image || CAR_IMAGE_FALLBACK}
                   alt={car.title}
-                  loading="lazy"
-                  decoding="async"
-                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  fill
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                  className="object-cover group-hover:scale-105 transition-transform duration-500"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement
+                    if (target.src !== CAR_IMAGE_FALLBACK) target.src = CAR_IMAGE_FALLBACK
+                  }}
                 />
                 <span className="absolute top-3 left-3 bg-slate-900/90 backdrop-blur-sm text-accent text-xs font-bold px-2.5 py-1 rounded-md">
                   {car.tag}

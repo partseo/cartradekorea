@@ -19,7 +19,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       .single()
 
     if (car) {
-      const title = `${car.brand} ${car.model} (${car.year}) for Export | Global Auto Export`
+      const title = `${car.brand} ${car.model} (${car.year}) for Export | Car Trade Korea`
       const description = `Buy certified ${car.title} for export from South Korea. Instant FOB/CIF price quote $${Number(car.price_usd).toLocaleString()}. Safe shipping & document handling.`
       return {
         title,
@@ -27,7 +27,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
         openGraph: {
           title,
           description,
-          url: `https://www.globalautoexport.com/cars/${id}`
+          url: `https://www.cartradekorea.com/cars/${id}`
         }
       }
     }
@@ -37,7 +37,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   // 폴백 기본 메타데이터
   return {
-    title: "Premium Korean Used Car for Export | Global Auto Export",
+    title: "Premium Korean Used Car for Export | Car Trade Korea",
     description: "Export high-quality Korean used cars directly from Incheon yard. Safe trade, global RORO shipping, and verified photos."
   }
 }

@@ -22,10 +22,10 @@
 ## 2. 도메인 & SSL 보안
 
 - [ ] **도메인 연결 및 SSL 인증서**:
-  - [ ] `Vercel` 또는 `Cloudflare Pages`에 운영 도메인(e.g., `www.globalautoexport.com`) 바인딩 완료.
+  - [ ] `Vercel` 또는 `Cloudflare Pages`에 운영 도메인(e.g., `www.cartradekorea.com`) 바인딩 완료.
   - [ ] HTTPS (SSL) 인증서 발급 및 강제 리다이렉트 활성화 상태 점검.
 - [ ] **환경 변수 업데이트 (`.env.production`)**:
-  - [ ] `NEXT_PUBLIC_SITE_URL`에 로컬 호스트(`localhost:3000`) 대신 실제 운영 도메인(`https://www.globalautoexport.com`)이 입력되어 있는지 확인.
+  - [ ] `NEXT_PUBLIC_SITE_URL`에 로컬 호스트(`localhost:3000`) 대신 실제 운영 도메인(`https://www.cartradekorea.com`)이 입력되어 있는지 확인.
 
 ---
 

@@ -2,12 +2,22 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
 export async function POST(request: Request) {
+  const startTime = performance.now()
+  const requestId = request.headers.get('x-request-id') || Math.random().toString(36).substring(7)
+  
   try {
     const body = await request.json()
     const { carId, countryId, portId, terms } = body
 
     if (!carId) {
-      return NextResponse.json({ error: 'carId is required' }, { status: 400 })
+      const duration = performance.now() - startTime
+      console.log(`[PERFORMANCE] API: calculate-price | Duration: ${duration.toFixed(1)}ms | Status: 400 | RequestID: ${requestId} | ErrorCode: MISSING_CAR_ID`)
+      return NextResponse.json({ error: 'carId is required' }, { 
+        status: 400,
+        headers: {
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
+        }
+      })
     }
 
     const supabase = await createClient()
@@ -72,6 +82,9 @@ export async function POST(request: Request) {
     validDate.setDate(validDate.getDate() + 14)
     const quote_valid_until = validDate.toISOString().split('T')[0]
 
+    const duration = performance.now() - startTime
+    console.log(`[PERFORMANCE] API: calculate-price | Duration: ${duration.toFixed(1)}ms | Status: 200 | RequestID: ${requestId}`)
+
     return NextResponse.json({
       success: true,
       vehicle_price,
@@ -86,10 +99,15 @@ export async function POST(request: Request) {
       cif_total,
       quote_valid_until,
       terms
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
+      }
     })
 
   } catch (err: any) {
-    console.error(err)
+    const duration = performance.now() - startTime
+    console.log(`[PERFORMANCE] API: calculate-price | Duration: ${duration.toFixed(1)}ms | Status: 500 | RequestID: ${requestId} | ErrorCode: ${err.code || 'UNKNOWN_ERROR'}`)
     
     // 에러 발생 시 안전 폴백 응답
     const fallbackCarPrice = 12000
@@ -113,6 +131,10 @@ export async function POST(request: Request) {
       cif_total: fallbackCif,
       quote_valid_until: validDate.toISOString().split('T')[0],
       terms: 'CIF'
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
+      }
     })
   }
 }

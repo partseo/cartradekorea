@@ -73,3 +73,45 @@
 | **Storage 권한** | **Supabase Storage Logs** | `export-documents` 업로드 실패(413 Payload Too Large 또는 403 Permission Denied) 로그 확인 |
 | **이메일 발송 실패** | **Resend Delivery Logs** | Resend API 대시보드 내의 Bounced(반송), Rejected(거부) 내역 검사 및 도메인 SPF/DKIM 메타레코드 누락 여부 확인 |
 | **어드민 권한 조작** | **`public.admin_logs` 테이블 조회** | 관리자가 의도하지 않게 특정 스태프 계정을 잘못 승격/강등 시켰는지 감사 내역 조회 |
+
+---
+
+## 4. 성능 지연 API 진단 및 Supabase 쿼리 프로파일링 가이드
+
+운영 중 특정 API의 처리 시간이 급증하거나 차량 목록 로딩이 지연되는 성능 병목이 발생할 때의 조치 및 쿼리 프로파일링 방법입니다.
+
+### 1) 느린 API 및 로깅 모니터링
+서버 로그에 `[PERFORMANCE] API: calculate-price` 또는 `[PERFORMANCE] API: send-email` 형태로 로깅되는 지연 시간을 정기적으로 모니터링합니다.
+- **임계값 기준**:
+  - `calculate-price` API: **1.0초 초과** 시 지연 상태로 판단.
+  - `send-email` API: **3.0초 초과** 시 지연 상태로 판단 (외부 Resend API 병목 가능성 확인).
+  - `Storage Upload` / `PDF Helper`: **5.0초 초과** 시 지연 상태로 판단.
+- **조치 절차**:
+  1. 로그의 `RequestID`를 확보하여 연관된 다른 로그 트레이스(Supabase Query 시간, Storage Upload 시간 등)를 추적합니다.
+  2. 병목 구간이 데이터베이스 쿼리 속도인지, 아니면 외부 이메일 API 전송 또는 PDF 생성 로직인지 특정합니다.
+  3. PDF 생성의 경우 `jspdf` dynamic import가 제대로 적용되어 번들 레이턴시를 예방하고 있는지 체크합니다.
+
+### 2) Supabase 쿼리 프로파일링 (`EXPLAIN ANALYZE`)
+특정 차량 조건 검색/필터링 시 로딩 시간이 비정상적으로 느린 경우, Supabase Dashboard > **SQL Editor**에서 `EXPLAIN ANALYZE` 명령을 활용하여 추가한 인덱스가 제대로 작동하는지 검증합니다.
+
+#### 기본 검증 템플릿
+```sql
+-- 1. 기본 차량 목록 및 최근순 정렬 쿼리 프로파일링
+EXPLAIN ANALYZE
+SELECT id, title, brand, year, mileage, fuel_type, transmission, price_usd, price_krw, status, main_image_url
+FROM public.cars
+WHERE status = 'available'
+ORDER BY created_at DESC
+LIMIT 12;
+```
+
+#### 결과 확인 및 진단
+- **인덱스 스캔 성공 (Pass)**:
+  - 출력 실행 계획 결과에 `Index Scan using idx_cars_status_created_at` 또는 `Index Only Scan` 문구가 포함되어 있다면 인덱스가 올바르게 적용되어 물리 디스크 스캔 없이 인덱스 블록만 훑은 것입니다.
+- **풀 테이블 스캔 발생 (Fail / Warning)**:
+  - 만약 결과에 `Seq Scan on cars` (Sequential Scan)이 발견된다면 인덱스를 타지 못하고 전체 행을 순차 탐색하고 있는 것입니다.
+- **풀 테이블 스캔 대처법**:
+  1. 조건문(`WHERE`)의 좌변 컬럼을 임의로 가공(함수 적용 등)하여 인덱스 매칭이 깨졌는지 확인합니다.
+  2. 필터 조건에 쓰인 복합 컬럼 순서(`status`, `brand`, `created_at`)가 생성된 인덱스 구성 순서와 일치하는지 확인하십시오.
+  3. 데이터 양이 극도로 적을 때는 PostgreSQL 옵티마이저가 인덱스 스캔보다 풀 스캔이 빠르다고 판단하여 `Seq Scan`을 수행할 수 있으므로, 최소 100건 이상의 시드 데이터를 적재 후 재진단하십시오.
+

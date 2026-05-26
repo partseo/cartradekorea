@@ -46,3 +46,28 @@
 - [ ] **RLS(Row Level Security) 상태 감시**:
   - `cars`, `profiles`, `quote_requests`, `export_documents` 등 모든 핵심 테이블의 RLS 상태가 `Enabled` 인지 Supabase Table Editor에서 확인합니다.
   - RLS가 비활성화되면(Disabled) 익명의 바이어가 타인의 개인정보 및 서류 경로를 전부 조회할 수 있으므로, 매 마일스톤 업데이트 후 RLS 설정 여부를 감시합니다.
+
+---
+
+## 4. 로그 및 모니터링 보안 정책
+
+애플리케이션 성능 측정 및 에러 추적 로그에 사용자의 민감한 정보가 보관되거나 출력되는 정보 유출 사고를 방지합니다.
+
+- [ ] **애플리케이션 로그 내 민감 정보 마스킹 검증**:
+  - `[PERFORMANCE]` 또는 일반 서버 로그 출력 시, 바이어 및 사용자의 어떠한 개인정보나 고유 식별자도 인쇄되지 않도록 점검합니다.
+  - **로그 수집 허용 정보**:
+    - 호출 경로/API 이름 (`route name`)
+    - 처리 소요 시간 (`duration ms`)
+    - 응답 HTTP 상태코드 (`status code`)
+    - 임의의 난수 요청 ID (`request id` / `trace id`)
+    - 처리 중 발생한 예외 에러 코드 (`error code` / `code`)
+  - **로그 수집 절대 금지 정보**:
+    - 바이어 이메일 주소 (`buyer email`)
+    - WhatsApp/전화번호 (`whatsapp / phone number`)
+    - 차량의 전체 차대번호 (`VIN`)
+    - Supabase Service Role Key 또는 DB 패스워드
+    - Storage의 Signed URL 전체 경로 및 토큰 파라미터 전문
+    - 개인 이름 및 기타 식별 데이터
+    - 견적 세부 금액 정보 전체 (FOB/CIF 최종 단가를 제외한 세부 내역)
+- [ ] **정기적인 로그 저장소 감사**:
+  - Vercel Logs 또는 서버 콘솔 출력 이력에서 이메일 형식(`*@*.*`)이나 차대번호 등 마스킹 처리되지 않은 개인 데이터가 원시 문자열로 기록되고 있는지 주기적으로 파악하고 정정합니다.

@@ -61,7 +61,7 @@ git grep "RESEND_API_KEY"
 | `NEXT_PUBLIC_SUPABASE_URL` | **가능** | `https://prod-project.supabase.co` | `https://dev-project.supabase.co` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **가능** | *Prod Anon Key* | *Dev Anon Key* |
 | `SUPABASE_SERVICE_ROLE_KEY` | **불가 (서버전용)** | *Prod Service Role Key* | *Dev Service Role Key* |
-| `NEXT_PUBLIC_SITE_URL` | **가능** | `https://www.globalautoexport.com` | `https://preview.domain.com` 또는 `http://localhost:3000` |
+| `NEXT_PUBLIC_SITE_URL` | **가능** | `https://www.cartradekorea.com` | `https://preview.domain.com` 또는 `http://localhost:3000` |
 | `RESEND_API_KEY` | **불가 (서버전용)** | *Prod Resend API Key* | *Dev/Sandbox Resend API Key* |
 | `NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER` | **가능** | *실제 운영 WhatsApp 번호* | *개발용 테스트 연락처* |
 
@@ -167,19 +167,19 @@ Vercel은 자체적으로 Let's Encrypt SSL 인증서를 발급하여 HTTPS orig
 최초 1회에 한해, Supabase Console SQL Editor에서 데이터베이스 전권 어드민(Owner) 권한으로 아래 쿼리를 직접 수행하여 초기 어드민을 생성합니다.
 
 ```sql
--- 1단계: Supabase Auth에 이메일 가입 진행 (예: admin@globalauto.com)
+-- 1단계: Supabase Auth에 이메일 가입 진행 (예: admin@cartradekorea.com)
 -- 2단계: 가입 완료 후 SQL Editor에서 아래 쿼리를 실행해 admin으로 승격
 UPDATE public.profiles
 SET role = 'admin'
-WHERE email = 'admin@globalauto.com';
+WHERE email = 'admin@cartradekorea.com';
 
 -- 3단계: 관리자 승격 실행자 및 시점 기록을 admin_logs에 수동 적재 (감사용)
 INSERT INTO public.admin_logs (admin_id, action, target_table, record_id, details)
 VALUES (
-  (SELECT id FROM public.profiles WHERE email = 'admin@globalauto.com'),
+  (SELECT id FROM public.profiles WHERE email = 'admin@cartradekorea.com'),
   'PROMOTE_INITIAL_ADMIN',
   'profiles',
-  (SELECT id FROM public.profiles WHERE email = 'admin@globalauto.com'),
+  (SELECT id FROM public.profiles WHERE email = 'admin@cartradekorea.com'),
   'System bootstrap: Initial administrator account created and promoted via SQL Editor'
 );
 ```
@@ -189,3 +189,43 @@ VALUES (
 
 - **절차**: 신규 관리자 임명 시, 기존 `admin` 계정으로 관리자 대시보드(`/admin/users`)에 접속한 후 UI를 통해 권한을 `staff` 또는 `admin`으로 변경합니다.
 - **감사 로그(Audit Trail)**: 권한 변경 트랜잭션 수행 시, 백엔드 API에서 자동으로 `public.admin_logs` 테이블에 실행자 ID, 대상자 ID, 권한 등급 및 변경 일시를 실시간 로깅하여 저장하도록 코드가 작동합니다.
+
+---
+
+## 7. Cloudflare Cache Rules & 이미지 스토리지 이중화 구성
+
+프로플랫폼의 웹 운영 속도를 높이고, 동시에 보안과 데이터 원본 보존을 달성하기 위한 캐시 규칙 및 스토리지 운영 방법입니다.
+
+### 1) Cloudflare 캐시 규칙 (Cache Rules)
+상용 운영 시 Cloudflare 대시보드의 **Caching** > **Cache Rules** 메뉴에서 아래 규칙들을 생성하여 동적 데이터와 정적 데이터를 분리 캐싱하도록 설정하십시오.
+
+#### Rule A: 정적 자산 및 공개 이미지 강력 캐시 (Cache Always)
+- **Expression**:
+  ```text
+  (http.request.uri.path starts_with "/_next/static/") or (http.request.uri.path starts_with "/images/") or (http.request.uri.path starts_with "/storage/v1/object/public/car-images/")
+  ```
+- **Eligible for Cache**: Cache
+- **Edge TTL**: Use Cache-Control header (또는 1개월 설정 권장)
+- **Browser TTL**: 1개월 이상
+
+#### Rule B: 관리자 페이지 및 API 캐싱 제외 (Bypass Cache)
+- **Expression**:
+  ```text
+  (http.request.uri.path starts_with "/api/") or (http.request.uri.path starts_with "/admin/") or (http.request.uri.path contains "token") or (http.request.uri.query contains "token")
+  ```
+- **Eligible for Cache**: Bypass Cache
+- **설명**: 관리자 페이지 및 견적 계산, 메일 발송 API, 그리고 Storage의 signed URL(임시 토큰 매핑형 서류 링크) 요청 등은 캐시되지 않도록 원천 차단하여 실시간성과 보안을 확보합니다.
+
+### 2) 이미지 스토리지 이중화 구성 (Public / Private)
+관리자가 차량 매물을 등록할 때 아래와 같이 스토리지 구조가 이중화되어 동작하므로 Supabase Storage에 버킷이 존재해야 합니다.
+
+1. **`car-images` (Public Bucket)**:
+   - **설명**: 웹 프론트엔드 노출을 목적으로 하는 WebP 압축본 이미지 저장소입니다.
+   - **정책**: Public 접근 허용. CDN 캐싱 적극 권장.
+2. **`car-originals` (Private Bucket)**:
+   - **설명**: 관리자가 원본 이미지 보관(토글 활성화)을 선택한 경우에 원본 파일 백업이 보관되는 저장소입니다.
+   - **정책**: Private 설정. 일반 바이어 접근 차단.
+3. **`car-documents` (Private Bucket)**:
+   - **설명**: 기술 성능점검표(Technical Inspection Sheet) PDF가 보관되는 저장소입니다.
+   - **정책**: Private 설정. 다운로드 시 임시 signed URL을 통해 60분간만 유효한 다운로드 제공.
+

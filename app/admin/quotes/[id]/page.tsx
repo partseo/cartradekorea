@@ -58,8 +58,8 @@ export default async function AdminQuoteDetailPage({
     if (docs) {
       const qDoc = docs.find((doc: any) => doc.document_name === 'Quotation')
       const iDoc = docs.find((doc: any) => doc.document_name === 'Proforma Invoice')
-      if (qDoc) quotationUrl = qDoc.file_url
-      if (iDoc) invoiceUrl = iDoc.file_url
+      if (qDoc) quotationUrl = `/api/documents/download?id=${qDoc.id}`
+      if (iDoc) invoiceUrl = `/api/documents/download?id=${iDoc.id}`
     }
 
   } catch (err: any) {

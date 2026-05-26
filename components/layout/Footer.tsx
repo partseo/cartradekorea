@@ -7,7 +7,7 @@ import { Car, Mail, Phone, MapPin, ExternalLink } from 'lucide-react'
 export default function Footer() {
   const pathname = usePathname()
   const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_PHONE_NUMBER || '821000000000'
-  const whatsappUrl = `https://wa.me/${whatsappNumber}?text=Hello,%20I%20am%20interested%20in%20buying%20a%20used%20car%20from%20GlobalAuto.`
+  const whatsappUrl = `https://wa.me/${whatsappNumber}?text=Hello,%20I%20am%20interested%20in%20buying%20a%20used%20car%20from%20Car%20Trade%20Korea.`
 
   // 어드민 관리자 페이지에서는 하단 푸터를 렌더링하지 않음
   if (pathname.startsWith('/admin')) {
@@ -24,7 +24,7 @@ export default function Footer() {
           <div className="space-y-4">
             <Link href="/" className="flex items-center space-x-2 text-xl font-bold tracking-wider text-white">
               <Car className="h-6 w-6 text-accent" />
-              <span className="font-extrabold uppercase">GLOBAL<span className="text-accent">AUTO</span></span>
+              <span className="font-extrabold uppercase">CAR TRADE <span className="text-accent">KOREA</span></span>
             </Link>
             <p className="text-sm leading-relaxed text-slate-400">
               Leading the global market in high-quality Korean used car exports. We provide reliable shipping, complete export documentation, and premium customer service.
@@ -88,7 +88,7 @@ export default function Footer() {
             </div>
             <div className="flex items-center space-x-2.5 text-sm">
               <Mail className="h-4 w-4 text-accent shrink-0" />
-              <span>support@globalautoexport.com</span>
+              <span>support@cartradekorea.com</span>
             </div>
           </div>
 
@@ -96,7 +96,7 @@ export default function Footer() {
 
         {/* 하단 바 (저작권 등) */}
         <div className="mt-12 pt-8 border-t border-slate-900 flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 space-y-4 md:space-y-0">
-          <p>© {new Date().getFullYear()} GlobalAuto Export Co. Ltd. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} Car Trade Korea Co., Ltd. All rights reserved.</p>
           <div className="flex space-x-6">
             <span className="hover:text-slate-300 cursor-pointer">Privacy Policy</span>
             <span className="hover:text-slate-300 cursor-pointer">Terms of Service</span>

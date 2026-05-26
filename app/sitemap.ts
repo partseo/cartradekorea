@@ -2,7 +2,7 @@ import { MetadataRoute } from 'next'
 import { createClient } from '@/lib/supabase/client'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.globalautoexport.com'
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.cartradekorea.com'
 
   // 고정 정적 페이지 경로들
   const staticRoutes = [

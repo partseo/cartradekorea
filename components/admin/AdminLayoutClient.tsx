@@ -69,7 +69,7 @@ export default function AdminLayoutClient({
         </p>
 
         {/* 상세 디버그 진단 박스 */}
-        {debugInfo && (
+        {debugInfo && process.env.NODE_ENV === 'development' && (
           <div className="mt-6 w-full max-w-lg bg-slate-900 border border-red-900/50 rounded-xl p-5 text-left text-xs font-mono space-y-2 text-slate-300 shadow-xl mx-auto">
             <h3 className="text-red-400 font-bold border-b border-slate-800 pb-2 mb-2 uppercase tracking-wider text-[11px]">🔧 접근 제어 진단 데이터 (Diagnostic Info)</h3>
             <div className="flex justify-between py-1 border-b border-slate-800/50"><span className="text-slate-500">계정 이메일:</span> <span className="text-white font-bold">{debugInfo.email}</span></div>
@@ -115,7 +115,7 @@ export default function AdminLayoutClient({
           <div className="flex items-center justify-between pb-4 border-b border-slate-800">
             <Link href="/" className="flex items-center space-x-2 text-white">
               <Car className="h-6 w-6 text-accent" />
-              <span className="font-extrabold text-sm tracking-wider uppercase">GLOBALAUTO <span className="text-accent text-[10px]">ADMIN</span></span>
+              <span className="font-extrabold text-sm tracking-wider uppercase">CAR TRADE KOREA <span className="text-accent text-[10px]">ADMIN</span></span>
             </Link>
           </div>
 
@@ -166,7 +166,7 @@ export default function AdminLayoutClient({
         <header className="lg:hidden h-16 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-4 sm:px-6 shrink-0">
           <Link href="/" className="flex items-center space-x-2 text-white">
             <Car className="h-5 w-5 text-accent" />
-            <span className="font-extrabold text-sm uppercase">GLOBALAUTO <span className="text-accent text-[10px]">ADMIN</span></span>
+            <span className="font-extrabold text-sm uppercase">CAR TRADE KOREA <span className="text-accent text-[10px]">ADMIN</span></span>
           </Link>
           <button
             onClick={() => setIsSidebarOpen(!isSidebarOpen)}

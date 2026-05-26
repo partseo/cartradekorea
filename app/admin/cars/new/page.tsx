@@ -53,8 +53,15 @@ export default function NewCarPage() {
   const [success, setSuccess] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
 
-  // 다중 이미지 파일 상태
+  // 다중 이미지 파일 상태 (압축본)
   const [imageFiles, setImageFiles] = useState<File[]>([])
+  const [originalFiles, setOriginalFiles] = useState<File[]>([]) // 원본 보관용
+  const [compressedInfos, setCompressedInfos] = useState<Array<{
+    originalSize: number
+    compressedSize: number
+    isFallback: boolean
+  }>>([])
+  const [keepOriginals, setKeepOriginals] = useState(false)
   const [previews, setPreviews] = useState<string[]>([])
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<CarFormValues>({
@@ -93,21 +100,78 @@ export default function NewCarPage() {
 
   const watchPhotoVerified = watch('photo_verified')
 
-  // 이미지 선택 핸들러
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // 이미지 선택 및 자동 압축/리사이징 핸들러
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const filesArray = Array.from(e.target.files)
-      setImageFiles((prev) => [...prev, ...filesArray])
-      
-      const previewsArray = filesArray.map(file => URL.createObjectURL(file))
-      setPreviews((prev) => [...prev, ...previewsArray])
+      const newFiles: File[] = []
+      const newOriginals: File[] = []
+      const newInfos: Array<{ originalSize: number; compressedSize: number; isFallback: boolean }> = []
+      const newPreviews: string[] = []
+
+      setIsLoading(true)
+      setErrorMessage(null)
+
+      try {
+        const { compressImage } = await import('@/lib/image-helper')
+
+        for (const file of filesArray) {
+          try {
+            // 대표 이미지는 첫 번째 이미지(이미지 개수가 0이고 현재 배열에도 첫 번째일 때)로 취급하여 1600px, 나머지는 800px
+            const isMain = imageFiles.length === 0 && newFiles.length === 0
+            const result = await compressImage(file, isMain)
+            newFiles.push(result.file)
+            newOriginals.push(file)
+            newInfos.push({
+              originalSize: result.originalSize,
+              compressedSize: result.compressedSize,
+              isFallback: false
+            })
+            newPreviews.push(URL.createObjectURL(result.file))
+          } catch (err: any) {
+            if (err.message === 'HEIC_NOT_SUPPORTED') {
+              alert(`[HEIC 미지원] ${file.name}은(는) HEIC 포맷으로 브라우저 내 직접 압축을 지원하지 않습니다. JPG/PNG 파일로 변환하여 업로드해주세요.`)
+            } else if (err.message === 'CANVAS_COMPRESSION_FAILED') {
+              if (file.size > 2 * 1024 * 1024) {
+                alert(`[업로드 차단] ${file.name}의 압축에 실패했으며, 원본 크기(${(file.size / 1024 / 1024).toFixed(2)}MB)가 2MB 제한을 초과하여 등록할 수 없습니다.`)
+              } else {
+                const acceptOriginal = confirm(`[압축 실패] ${file.name}의 압축에 실패했습니다.\n단, 원본 크기가 2MB 이하(${(file.size / 1024 / 1024).toFixed(2)}MB)이므로 원본 그대로 업로드하시겠습니까?`)
+                if (acceptOriginal) {
+                  newFiles.push(file)
+                  newOriginals.push(file)
+                  newInfos.push({
+                    originalSize: file.size,
+                    compressedSize: file.size,
+                    isFallback: true
+                  })
+                  newPreviews.push(URL.createObjectURL(file))
+                }
+              }
+            } else {
+              alert(`[오류] ${file.name} 처리 중 문제가 발생했습니다: ${err.message || err}`)
+            }
+          }
+        }
+
+        setImageFiles((prev) => [...prev, ...newFiles])
+        setOriginalFiles((prev) => [...prev, ...newOriginals])
+        setCompressedInfos((prev) => [...prev, ...newInfos])
+        setPreviews((prev) => [...prev, ...newPreviews])
+      } catch (globalErr: any) {
+        console.error(globalErr)
+        setErrorMessage('이미지 압축 처리 중 에러가 발생했습니다.')
+      } finally {
+        setIsLoading(false)
+      }
     }
   }
 
   // 프리뷰 이미지 제거
   const handleRemovePreview = (index: number) => {
-    setImageFiles(imageFiles.filter((_, i) => i !== index))
-    setPreviews(previews.filter((_, i) => i !== index))
+    setImageFiles((prev) => prev.filter((_, i) => i !== index))
+    setOriginalFiles((prev) => prev.filter((_, i) => i !== index))
+    setCompressedInfos((prev) => prev.filter((_, i) => i !== index))
+    setPreviews((prev) => prev.filter((_, i) => i !== index))
   }
 
   const onSubmit = async (values: CarFormValues) => {
@@ -166,13 +230,16 @@ export default function NewCarPage() {
 
       if (specError) throw specError
 
-      // 3. 이미지 업로드
+      // 3. 이미지 업로드 & 대표 이미지 셋팅
+      let mainImageUrl = ''
       if (imageFiles.length > 0) {
         for (let i = 0; i < imageFiles.length; i++) {
           const file = imageFiles[i]
-          const fileExt = file.name.split('.').pop()
+          const originalFile = originalFiles[i]
+          const fileExt = file.name.split('.').pop() || 'webp'
           const fileName = `${carId}/${Date.now()}-${i}.${fileExt}`
           
+          // WebP 압축본 업로드 (Public 'car-images')
           const { error: uploadError } = await supabase.storage
              .from('car-images')
              .upload(fileName, file)
@@ -182,6 +249,19 @@ export default function NewCarPage() {
           const { data: { publicUrl } } = supabase.storage
             .from('car-images')
             .getPublicUrl(fileName)
+
+          if (i === 0) {
+            mainImageUrl = publicUrl
+          }
+
+          // 원본 파일 보관 선택 시 업로드 (Private 'car-originals')
+          if (keepOriginals && originalFile) {
+            const originalExt = originalFile.name.split('.').pop() || 'jpg'
+            const origFileName = `${carId}/${Date.now()}-${i}-original.${originalExt}`
+            await supabase.storage
+              .from('car-originals')
+              .upload(origFileName, originalFile)
+          }
 
           const { error: imgError } = await supabase
             .from('car_images')
@@ -194,8 +274,16 @@ export default function NewCarPage() {
 
           if (imgError) throw imgError
         }
-      }
 
+        // cars 테이블의 main_image_url 대표 이미지 컬럼 업데이트
+        if (mainImageUrl) {
+          const { error: updateError } = await supabase
+            .from('cars')
+            .update({ main_image_url: mainImageUrl })
+            .eq('id', carId)
+          if (updateError) throw updateError
+        }
+      }
       setSuccess(true)
       setTimeout(() => {
         router.push('/admin/cars')
@@ -555,12 +643,26 @@ export default function NewCarPage() {
 
         {/* 4. 이미지 업로드 */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 sm:p-6 shadow space-y-4">
-          <h2 className="text-base font-bold text-white border-b border-slate-800 pb-2 mb-4">Vehicle Images Upload</h2>
+          <div className="flex justify-between items-center border-b border-slate-800 pb-2 mb-4">
+            <h2 className="text-base font-bold text-white">Vehicle Images Upload</h2>
+            
+            {/* 원본 파일 보관 체크박스 */}
+            <label className="flex items-center space-x-2 text-xs text-slate-400 font-bold cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={keepOriginals}
+                onChange={(e) => setKeepOriginals(e.target.checked)}
+                className="h-3.5 w-3.5 bg-slate-950 border border-slate-800 rounded text-accent focus:ring-accent"
+              />
+              <span>Keep Original Images (Private Backup)</span>
+            </label>
+          </div>
           
           <div className="border-2 border-dashed border-slate-800 hover:border-slate-700 rounded-xl p-8 text-center transition relative">
             <Upload className="h-10 w-10 text-slate-500 mx-auto mb-2" />
             <span className="text-sm font-semibold text-slate-300 block">Click or Drag images here to upload</span>
-            <span className="text-xs text-slate-500 block mt-1">PNG, JPG, JPEG up to 5MB (Max 8 files)</span>
+            <span className="text-xs text-slate-500 block mt-1">Images auto-compressed (Main: 1600px, Gallery: 800px WebP)</span>
+            <span className="text-[10px] text-red-450 block mt-0.5">HEIC not supported. Max 2MB limit for raw uploads.</span>
             <input
               type="file"
               multiple
@@ -572,23 +674,45 @@ export default function NewCarPage() {
 
           {previews.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-4">
-              {previews.map((preview, idx) => (
-                <div key={idx} className="relative aspect-[16/10] bg-slate-950 rounded-xl overflow-hidden group border border-slate-800">
-                  <img src={preview} alt="upload preview" className="w-full h-full object-cover" />
-                  <button
-                    type="button"
-                    onClick={() => handleRemovePreview(idx)}
-                    className="absolute top-2 right-2 bg-slate-950/80 hover:bg-red-500 text-white rounded-full p-1.5 transition cursor-pointer"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                  {idx === 0 && (
-                    <span className="absolute bottom-2 left-2 bg-accent text-white text-[9px] font-black px-2 py-0.5 rounded shadow">
-                      Main Photo
-                    </span>
-                  )}
-                </div>
-              ))}
+              {previews.map((preview, idx) => {
+                const info = compressedInfos[idx]
+                const origKb = info ? Math.round(info.originalSize / 1024) : 0
+                const compKb = info ? Math.round(info.compressedSize / 1024) : 0
+                const pct = info && info.originalSize > 0 
+                  ? Math.round(((info.originalSize - info.compressedSize) / info.originalSize) * 100)
+                  : 0
+
+                return (
+                  <div key={idx} className="relative aspect-[16/10] bg-slate-950 rounded-xl overflow-hidden group border border-slate-800 flex flex-col justify-between">
+                    <div className="relative w-full flex-grow">
+                      <img src={preview} alt="upload preview" className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePreview(idx)}
+                        className="absolute top-2 right-2 bg-slate-950/80 hover:bg-red-500 text-white rounded-full p-1.5 transition cursor-pointer z-10"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                      {idx === 0 && (
+                        <span className="absolute bottom-2 left-2 bg-accent text-white text-[9px] font-black px-2 py-0.5 rounded shadow z-10">
+                          Main Photo (1600px)
+                        </span>
+                      )}
+                      {info?.isFallback && (
+                        <span className="absolute bottom-2 right-2 bg-red-650 text-white text-[9px] font-black px-2 py-0.5 rounded shadow z-10">
+                          Fallback (Raw)
+                        </span>
+                      )}
+                    </div>
+                    {info && (
+                      <div className="bg-slate-900 border-t border-slate-800 px-2.5 py-1.5 text-[10px] text-slate-400 flex flex-col">
+                        <span className="text-slate-300 font-medium">Size: {origKb}KB → {compKb}KB</span>
+                        <span className="text-emerald-400 font-bold">Ratio: -{pct}% (WebP)</span>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>

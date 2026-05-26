@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { useSettings } from '@/lib/supabase/settings-context'
 import PriceDisplay from '@/components/common/PriceDisplay'
@@ -11,6 +12,8 @@ import {
   Check, FileText, Send, MessageCircle, DollarSign, Award, Layers, 
   Download 
 } from 'lucide-react'
+
+const CAR_IMAGE_FALLBACK = 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&q=80&w=800'
 
 // 목데이터: Fallback 상세 정보 매핑용 (신규 필드 포함)
 const DETAILED_MOCK_CARS: Record<string, any> = {
@@ -241,10 +244,19 @@ export default function CarDetailClient() {
             
             {/* 큰 메인 이미지 */}
             <div className="aspect-[16/10] bg-slate-900 rounded-2xl overflow-hidden shadow border border-slate-200 relative">
-              <img
-                src={activeImage}
+              {/* ✅ 상세페이지 LCP 이미지 — priority 적용으로 즉시 로드 */}
+              <Image
+                src={activeImage || CAR_IMAGE_FALLBACK}
                 alt={carData.title}
-                className="w-full h-full object-cover"
+                fill
+                priority
+                quality={85}
+                sizes="(max-width: 1024px) 100vw, 58vw"
+                className="object-cover"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement
+                  if (target.src !== CAR_IMAGE_FALLBACK) target.src = CAR_IMAGE_FALLBACK
+                }}
               />
               {carData.photo_verified && (
                 <div className="absolute top-4 left-4 bg-emerald-500/90 text-white text-xs font-black px-3 py-1.5 rounded-lg shadow-md flex items-center gap-1 backdrop-blur-sm">
@@ -260,11 +272,22 @@ export default function CarDetailClient() {
                 <button
                   key={idx}
                   onClick={() => setActiveImage(img)}
-                  className={`aspect-[16/10] bg-slate-100 rounded-xl overflow-hidden border-2 transition cursor-pointer ${
+                  className={`aspect-[16/10] bg-slate-100 rounded-xl overflow-hidden border-2 transition cursor-pointer relative ${
                     activeImage === img ? 'border-accent shadow-md scale-98' : 'border-transparent hover:border-slate-300'
                   }`}
                 >
-                  <img src={img} alt={`${carData.title} view ${idx}`} className="w-full h-full object-cover" />
+                  {/* ✅ 갤러리 썸네일 — lazy loading */}
+                  <Image
+                    src={img || CAR_IMAGE_FALLBACK}
+                    alt={`${carData.title} view ${idx + 1}`}
+                    fill
+                    sizes="(max-width: 640px) 25vw, 15vw"
+                    className="object-cover"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement
+                      if (target.src !== CAR_IMAGE_FALLBACK) target.src = CAR_IMAGE_FALLBACK
+                    }}
+                  />
                 </button>
               ))}
             </div>

@@ -14,6 +14,12 @@
   - `git grep` 명령어로 `SUPABASE_SERVICE_ROLE_KEY` 및 `RESEND_API_KEY` 문자열이 클라이언트 컴포넌트(`'use client'`) 파일에 잘못 기입되어 하드코딩되거나, `NEXT_PUBLIC_` 접두사로 선언된 부분이 없음을 교차 검증했습니다.
 - [ ] **.gitignore 규칙 정상 작동**:
   - 터미널에서 `.env.local` 및 개발용 설정 파일들이 git tracking 대상에서 완전히 제외되어 변경 내역(git status)에 검출되지 않음을 보장합니다.
+- [ ] **Supabase Storage 버킷 수동 생성 확인**:
+  - 상용 Supabase Console의 Storage 메뉴에서 다음 4가지 버킷이 용도 및 공개 여부 정책에 맞게 수동 생성되어 있음을 확인했습니다:
+    * **`car-images`**: Public (웹 노출용 압축 WebP 차량 이미지)
+    * **`car-originals`**: Private (원본 차량 이미지 보관용 - 선택 옵션)
+    * **`car-documents`**: Private (성능점검표 및 검증 서류)
+    * **`export-documents`**: Private (수출용 PDF 견적서 및 Proforma Invoice)
 
 ---
 

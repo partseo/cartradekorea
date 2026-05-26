@@ -8,7 +8,7 @@ import {
   ArrowLeft, CheckCircle, AlertCircle, Mail, Phone, 
   MapPin, Calendar, FileText, Save, Download, MessageSquare 
 } from 'lucide-react'
-import { createAndUploadQuotationPDF, createAndUploadInvoicePDF } from '@/lib/supabase/pdf-helper'
+// PDF 생성 및 스토리지 연동은 서버 API를 통과하도록 이관됨 (jspdf 클라이언트 로드 배제)
 
 interface AdminQuoteDetailClientProps {
   quoteId: string
@@ -141,40 +141,42 @@ export default function AdminQuoteDetailClient({
     setErrorMessage(null)
     setSuccessMessage(null)
     try {
-      const payload = {
-        quoteId: quoteId,
-        buyerName: initialQuote.buyer_name,
-        buyerEmail: initialQuote.buyer_email,
-        whatsapp: initialQuote.whatsapp,
-        carTitle: initialCar.title,
-        carBrand: initialCar.brand,
-        carModel: initialCar.model,
-        carYear: initialCar.year,
-        carPriceUsd: initialCar.price_usd,
-        quoteDetail: {
-          vehicle_price: vehiclePrice,
-          inland_transport_fee: inlandTransport,
-          port_handling_fee: portHandling,
-          inspection_fee: inspectionFee,
-          documentation_fee: documentationFee,
-          ocean_freight: oceanFreight,
-          marine_insurance: terms === 'CIF' ? marineInsurance : 0,
-          bank_charge: bankCharge,
-          fob_total: fobTotal,
-          cif_total: cifTotal,
-          quote_valid_until: new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString().split('T')[0],
-          terms
-        }
+      const pricingData = {
+        vehicle_price: vehiclePrice,
+        inland_transport_fee: inlandTransport,
+        port_handling_fee: portHandling,
+        inspection_fee: inspectionFee,
+        documentation_fee: documentationFee,
+        ocean_freight: oceanFreight,
+        marine_insurance: terms === 'CIF' ? marineInsurance : 0,
+        bank_charge: bankCharge,
+        fob_total: fobTotal,
+        cif_total: cifTotal,
+        quote_valid_until: new Date(Date.now() + 14 * 24 * 3600 * 1000).toISOString().split('T')[0],
+        terms
       }
 
-      let fileUrl = ''
+      const res = await fetch('/api/admin/generate-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          quoteId: quoteId,
+          type: type,
+          pricingData: pricingData
+        })
+      })
+
+      const data = await res.json()
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || `Failed to generate ${type} PDF.`)
+      }
+
+      const downloadUrl = `/api/documents/download?id=${data.documentId}`
       if (type === 'Quotation') {
-        fileUrl = await createAndUploadQuotationPDF(payload)
-        setQuotationUrl(fileUrl)
+        setQuotationUrl(downloadUrl)
         setSuccessMessage('Quotation PDF generated and uploaded successfully!')
       } else {
-        fileUrl = await createAndUploadInvoicePDF(payload)
-        setInvoiceUrl(fileUrl)
+        setInvoiceUrl(downloadUrl)
         setSuccessMessage('Proforma Invoice PDF generated and uploaded successfully!')
       }
     } catch (err: any) {
@@ -185,11 +187,15 @@ export default function AdminQuoteDetailClient({
     }
   }
 
-  // 이메일 발송 핸들러 (Resend API 연동 모의 호출)
+  // 이메일 발송 핸들러 (실시간 동적 다운로드 주소 메일링 연동)
   const handleSendEmail = async () => {
     setErrorMessage(null)
     setSuccessMessage(null)
     try {
+      const siteUrl = window.location.origin
+      const docLink = quotationUrl || invoiceUrl || ''
+      const fullDocumentUrl = docLink ? `${siteUrl}${docLink}` : ''
+
       const response = await fetch('/api/send-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -200,18 +206,23 @@ export default function AdminQuoteDetailClient({
           fobTotal: fobTotal,
           cifTotal: cifTotal,
           terms: terms,
-          documentUrl: quotationUrl || invoiceUrl || ''
+          documentUrl: fullDocumentUrl
         })
       })
 
       const data = await response.json()
-      if (data.success) {
-        setSuccessMessage('Quote details and document link sent to buyer email successfully!')
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Failed to dispatch email.')
+      }
+
+      if (data.simulated) {
+        setSuccessMessage('Email dispatch simulated successfully (Development Mock Mode).')
       } else {
-        throw new Error(data.message)
+        setSuccessMessage('Quote details and document link sent to buyer email successfully via Resend!')
       }
     } catch (err: any) {
-      setSuccessMessage('Mail sending mock completed (Resend API key required for full SMTP dispatch).')
+      console.error(err)
+      setErrorMessage(err.message || 'Failed to send email.')
     }
   }
 

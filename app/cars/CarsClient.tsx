@@ -3,10 +3,17 @@
 import { useState, useEffect, useMemo, useCallback, Suspense, memo } from 'react'
 import { useSearchParams as useNextSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { useSettings } from '@/lib/supabase/settings-context'
 import PriceDisplay from '@/components/common/PriceDisplay'
-import { Filter, SlidersHorizontal, X, ArrowUpDown, RefreshCw } from 'lucide-react'
+import { Filter, SlidersHorizontal, X, ArrowUpDown, RefreshCw, ChevronDown } from 'lucide-react'
+
+// 이미지 폴백 URL
+const CAR_IMAGE_FALLBACK = 'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&q=80&w=600'
+
+// 페이지당 차량 수
+const PAGE_SIZE = 12
 
 // 폴백용 가상 중고차 데이터
 const FALLBACK_CARS = [
@@ -198,49 +205,52 @@ function CarsPageContent() {
 
   const [cars, setCars] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [page, setPage] = useState(1)           // ✅ 페이지네이션
+  const [hasMore, setHasMore] = useState(true)  // ✅ 더 불러올 데이터 여부
+  const [loadingMore, setLoadingMore] = useState(false)
 
   // ✅ 핵심: supabase 클라이언트를 렌더 외부에 한번만 생성
   const supabase = useMemo(() => createClient(), [])
 
-  // ✅ 핵심: 의존성을 [] 로 고정 → 최초 1회만 실행
+  // ✅ 핵심: 시작 시 12개만 로드
   useEffect(() => {
     let cancelled = false
     async function loadCars() {
       try {
-        const { data, error } = await supabase
+        const { data } = await supabase
           .from('cars')
-          .select('id, title, brand, year, mileage, fuel_type, transmission, price_usd, price_krw, status, car_images(image_url, is_main)')
+          .select('id, title, brand, year, mileage, fuel_type, transmission, price_usd, price_krw, status, main_image_url')
           .eq('status', 'available')
-          .order('year', { ascending: false }) // DB 단에서 정렬
+          .range(0, PAGE_SIZE - 1)
+          .order('created_at', { ascending: false })
 
         if (cancelled) return
 
         if (data && data.length > 0) {
-          const formatted = data.map((car: any) => {
-            const mainImg =
-              car.car_images?.find((img: any) => img.is_main)?.image_url ||
-              car.car_images?.[0]?.image_url ||
-              'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&q=80&w=600'
-            return {
-              id: car.id,
-              title: car.title,
-              brand: car.brand,
-              year: car.year,
-              mileage: car.mileage,
-              fuel_type: car.fuel_type,
-              transmission: car.transmission,
-              price_usd: Number(car.price_usd),
-              price_krw: Number(car.price_krw),
-              image: mainImg,
-              status: car.status
-            }
-          })
+          const formatted = data.map((car: any) => ({
+            id: car.id,
+            title: car.title,
+            brand: car.brand,
+            year: car.year,
+            mileage: car.mileage,
+            fuel_type: car.fuel_type,
+            transmission: car.transmission,
+            price_usd: Number(car.price_usd),
+            price_krw: Number(car.price_krw),
+            image: car.main_image_url || CAR_IMAGE_FALLBACK,
+            status: car.status
+          }))
           setCars(formatted)
+          setHasMore(data.length === PAGE_SIZE)
         } else {
           setCars(FALLBACK_CARS)
+          setHasMore(false)
         }
       } catch {
-        if (!cancelled) setCars(FALLBACK_CARS)
+        if (!cancelled) {
+          setCars(FALLBACK_CARS)
+          setHasMore(false)
+        }
       } finally {
         if (!cancelled) setIsLoading(false)
       }
@@ -248,6 +258,45 @@ function CarsPageContent() {
     loadCars()
     return () => { cancelled = true }
   }, [supabase])
+
+  // ✅ Load More: 다음 12개 추가 로드
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return
+    setLoadingMore(true)
+    try {
+      const from = page * PAGE_SIZE
+      const to = from + PAGE_SIZE - 1
+      const { data } = await supabase
+        .from('cars')
+        .select('id, title, brand, year, mileage, fuel_type, transmission, price_usd, price_krw, status, main_image_url')
+        .eq('status', 'available')
+        .range(from, to)
+        .order('created_at', { ascending: false })
+
+      if (data && data.length > 0) {
+        const formatted = data.map((car: any) => ({
+          id: car.id,
+          title: car.title,
+          brand: car.brand,
+          year: car.year,
+          mileage: car.mileage,
+          fuel_type: car.fuel_type,
+          transmission: car.transmission,
+          price_usd: Number(car.price_usd),
+          price_krw: Number(car.price_krw),
+          image: car.main_image_url || CAR_IMAGE_FALLBACK,
+          status: car.status
+        }))
+        setCars(prev => [...prev, ...formatted])
+        setPage(prev => prev + 1)
+        setHasMore(data.length === PAGE_SIZE)
+      } else {
+        setHasMore(false)
+      }
+    } finally {
+      setLoadingMore(false)
+    }
+  }, [supabase, page, loadingMore, hasMore])
 
   // ✅ 핵심: 필터+정렬을 useMemo로 캐싱 → 차량 데이터/필터가 변할 때만 재계산
   const filteredCars = useMemo(() => {
@@ -366,13 +415,17 @@ function CarsPageContent() {
               {filteredCars.map((car) => (
                 <div key={car.id} className="bg-white rounded-2xl overflow-hidden border border-slate-100 shadow-sm hover:shadow-md transition-all flex flex-col group">
                   <div className="relative aspect-[16/10] bg-slate-50 overflow-hidden">
-                    {/* ✅ lazy loading으로 초기 로드 시간 단축 */}
-                    <img
-                      src={car.image}
+                    {/* ✅ next/image — 모바일/데스크탑 sizes + lazy loading + fallback */}
+                    <Image
+                      src={car.image || CAR_IMAGE_FALLBACK}
                       alt={car.title}
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-full object-cover group-hover:scale-102 transition-transform duration-300"
+                      fill
+                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                      className="object-cover group-hover:scale-102 transition-transform duration-300"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement
+                        if (target.src !== CAR_IMAGE_FALLBACK) target.src = CAR_IMAGE_FALLBACK
+                      }}
                     />
                     <PriceDisplay
                       priceUsd={car.price_usd}
@@ -410,6 +463,23 @@ function CarsPageContent() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {/* ✅ Load More 버튼 — 12개씩 추가 로드 */}
+          {hasMore && (
+            <div className="mt-8 text-center">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-400 text-white font-bold px-8 py-3 rounded-xl shadow transition active:scale-95 cursor-pointer text-sm"
+              >
+                {loadingMore ? (
+                  <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> 로딩 중...</>
+                ) : (
+                  <><ChevronDown className="h-4 w-4" /> 차량 더 보기 (12대)</>
+                )}
+              </button>
             </div>
           )}
         </div>

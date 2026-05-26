@@ -17,58 +17,44 @@ export default async function AdminLayout({
     redirect('/login')
   }
 
-  // 2. 권한 검증 (메타데이터 및 DB)
+  // 2. 권한 검증 (DB profiles.role 강제화)
   const metaRole = user.user_metadata?.role || 'None'
   let dbRole = 'None'
   let dbError = null
-  let isUserAdmin = metaRole === 'admin' || metaRole === 'staff'
+  let isUserAdmin = false
 
-  // 메타데이터에 권한이 없는 경우에만 동기식 DB 2차 검증을 수행합니다.
+  try {
+    const { data: profile, error } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
+
+    if (error) throw error
+    dbRole = profile?.role || 'None'
+    isUserAdmin = dbRole === 'admin' || dbRole === 'staff'
+  } catch (err: any) {
+    dbError = err.message || 'Unknown database error'
+    dbRole = `조회 실패 (${dbError})`
+  }
+
+  // 어드민/스태프 권한이 아니면 메인 화면으로 리다이렉트
   if (!isUserAdmin) {
-    try {
-      const { data: profile, error } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-
-      if (error) throw error
-      dbRole = profile?.role || 'None'
-      isUserAdmin = dbRole === 'admin' || dbRole === 'staff'
-    } catch (err: any) {
-      dbError = err.message || 'Unknown database error'
-      dbRole = `조회 실패 (${dbError})`
-    }
-  } else {
-    // 메타데이터로 우선 통과되었더라도, 디버그 데이터 구색을 맞추기 위해 조용히 DB 조회를 해 둡니다.
-    try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single()
-      if (profile) {
-        dbRole = profile.role || 'None'
-      }
-    } catch (e) {
-      // 에러 시 무시
-    }
+    redirect('/')
   }
 
   const debugInfo = {
     email: user.email || 'N/A',
     uid: user.id,
-    metaRole: metaRole,
+    metaRole: metaRole, // 표시/디버그용으로만 유지
     dbRole: dbRole,
-    errorMsg: isUserAdmin 
-      ? 'None' 
-      : `허용되지 않은 역할(Role)입니다. (필요: admin/staff, 현재: meta=${metaRole}, db=${dbRole})`
+    errorMsg: 'None'
   }
 
   return (
-    <AdminLayoutClient 
-      user={user} 
-      isAdmin={isUserAdmin} 
+    <AdminLayoutClient
+      user={user}
+      isAdmin={isUserAdmin}
       debugInfo={debugInfo}
     >
       {children}
